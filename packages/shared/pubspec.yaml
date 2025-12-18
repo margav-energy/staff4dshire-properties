@@ -1,0 +1,43 @@
+name: staff4dshire_shared
+description: Shared code package for Staff4dshire Admin and Staff apps
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # HTTP & API
+  http: ^1.1.2
+  
+  # Local Storage
+  shared_preferences: ^2.2.2
+  
+  # Authentication
+  google_sign_in: ^6.1.6
+  
+  # Date & Time
+  intl: ^0.18.1
+  
+  # Image Handling
+  image_picker: ^1.0.5
+  
+  # Utilities
+  crypto: ^3.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+
+
