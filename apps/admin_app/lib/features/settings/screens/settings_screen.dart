@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:staff4dshire_shared/shared.dart';
 import 'package:go_router/go_router.dart';
 import 'package:staff4dshire_shared/shared.dart';
+import '../../../../core/widgets/bottom_nav_bar.dart';
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -241,6 +242,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 32),
         ],
+      ),
+      bottomNavigationBar: Builder(
+        builder: (context) {
+          final currentPath = GoRouterState.of(context).uri.path;
+          return BottomNavBar(currentPath: currentPath);
+        },
       ),
     );
   }

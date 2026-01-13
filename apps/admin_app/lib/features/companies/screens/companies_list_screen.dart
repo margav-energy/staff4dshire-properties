@@ -23,7 +23,7 @@ class _CompaniesListScreenState extends State<CompaniesListScreen> {
       companyProvider.loadCompanies(userId: userId);
       // Superadmins see all users, regular admins see only their company
       if (authProvider.currentUser?.isSuperadmin == true || authProvider.currentUser?.role == UserRole.superadmin) {
-        userProvider.loadUsers();
+        userProvider.loadUsers(userId: null); // Explicitly pass null for superadmins
       } else {
         userProvider.loadUsers(userId: userId);
       }
@@ -41,7 +41,7 @@ class _CompaniesListScreenState extends State<CompaniesListScreen> {
     companyProvider.loadCompanies(userId: userId);
     // Superadmins see all users, regular admins see only their company
     if (authProvider.currentUser?.isSuperadmin == true || authProvider.currentUser?.role == UserRole.superadmin) {
-      userProvider.loadUsers();
+      userProvider.loadUsers(userId: null); // Explicitly pass null for superadmins
     } else {
       userProvider.loadUsers(userId: userId);
     }

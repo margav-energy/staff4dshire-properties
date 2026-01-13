@@ -11,6 +11,7 @@ import '../../auth/screens/sign_in_out_screen.dart';
 import '../widgets/welcome_banner.dart';
 import '../widgets/available_jobs_section.dart';
 import '../widgets/live_jobs_section.dart';
+import '../../../core/widgets/bottom_nav_bar.dart';
 
 class StaffDashboardScreen extends StatefulWidget {
   const StaffDashboardScreen({super.key});
@@ -40,6 +41,10 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
         // Load notifications for the current user
         final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
         notificationProvider.refreshNotifications(userId);
+        
+        // Initialize ChatProvider to show badges
+        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        chatProvider.initialize(userId);
       }
     });
   }
@@ -494,31 +499,11 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
               : _selectedIndex == 2
                   ? const TimesheetScreen()
                   : const DocumentHubScreen(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
+      bottomNavigationBar: Builder(
+        builder: (context) {
+          final currentPath = GoRouterState.of(context).uri.path;
+          return BottomNavBar(currentPath: currentPath);
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.login),
-            label: 'Sign In/Out',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.access_time),
-            label: 'Timesheet',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.folder),
-            label: 'Documents',
-          ),
-        ],
       ),
     );
   }

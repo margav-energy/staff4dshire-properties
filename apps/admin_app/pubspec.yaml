@@ -60,6 +60,9 @@ dependencies:
   flutter_svg: ^2.0.9
   animations: ^2.0.8
   
+  # Audio Playback
+  audioplayers: ^5.2.1
+  
   # OAuth & API Integration
   oauth2: ^2.0.2
   url_launcher: ^6.3.1
@@ -71,6 +74,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  
+  assets:
+    - assets/notification_sound.mp3
 
 
 

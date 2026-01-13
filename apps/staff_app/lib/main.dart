@@ -44,16 +44,23 @@ class StaffApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => InvoiceProvider()..loadInvoices()),
         ChangeNotifierProvider(create: (_) => OnboardingProvider()),
         ChangeNotifierProvider(create: (_) => CompanyProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
       ],
       child: _AppInitializer(
         authProvider: authProvider,
         userProvider: userProvider,
-        child: MaterialApp.router(
-          title: 'Staff4dshire Properties',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          themeMode: ThemeMode.light,
-          routerConfig: StaffRouter.createRouter(authProvider),
+        child: Listener(
+          onPointerDown: (_) {
+            // Prime audio on first user interaction (especially needed on web).
+            NotificationSoundPlayer.prime();
+          },
+          child: MaterialApp.router(
+            title: 'Staff4dshire Properties',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            themeMode: ThemeMode.light,
+            routerConfig: StaffRouter.createRouter(authProvider),
+          ),
         ),
       ),
     );
@@ -77,6 +84,7 @@ class _AppInitializer extends StatefulWidget {
 
 class _AppInitializerState extends State<_AppInitializer> {
   bool _isInitialized = false;
+  String? _initializedForUserId;
 
   @override
   void initState() {
@@ -92,6 +100,16 @@ class _AppInitializerState extends State<_AppInitializer> {
       
       // Initialize AuthProvider with UserProvider
       await widget.authProvider.initialize(userProvider: widget.userProvider);
+
+      // Initialize chat + notifications globally once we know the user
+      final userId = widget.authProvider.currentUser?.id;
+      if (userId != null && userId.isNotEmpty && _initializedForUserId != userId && mounted) {
+        _initializedForUserId = userId;
+        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+        await chatProvider.initialize(userId);
+        await notificationProvider.initialize(userId: userId);
+      }
       
       if (mounted) {
         setState(() {

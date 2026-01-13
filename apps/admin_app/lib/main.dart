@@ -25,8 +25,8 @@ class AdminApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = AuthProvider()..initialize();
     final userProvider = UserProvider()..initialize();
+    final authProvider = AuthProvider()..initialize(userProvider: userProvider);
     
     return MultiProvider(
       providers: [
@@ -43,15 +43,54 @@ class AdminApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => IncidentProvider()),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
         ChangeNotifierProvider(create: (_) => XeroProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
       ],
-      child: MaterialApp.router(
-        title: 'Staff4dshire Admin',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        themeMode: ThemeMode.light,
-        routerConfig: AdminRouter.createRouter(authProvider),
+      child: _AdminAppInitializer(
+        child: Listener(
+          onPointerDown: (_) {
+            // Prime audio on first user interaction (especially needed on web).
+            NotificationSoundPlayer.prime();
+          },
+          child: MaterialApp.router(
+            title: 'Staff4dshire Admin',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            themeMode: ThemeMode.light,
+            routerConfig: AdminRouter.createRouter(authProvider),
+          ),
+        ),
       ),
     );
+  }
+}
+
+class _AdminAppInitializer extends StatefulWidget {
+  final Widget child;
+  const _AdminAppInitializer({required this.child});
+
+  @override
+  State<_AdminAppInitializer> createState() => _AdminAppInitializerState();
+}
+
+class _AdminAppInitializerState extends State<_AdminAppInitializer> {
+  String? _initializedForUserId;
+
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+
+    final userId = authProvider.currentUser?.id;
+    if (userId != null && userId.isNotEmpty && _initializedForUserId != userId) {
+      _initializedForUserId = userId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        chatProvider.initialize(userId);
+        notificationProvider.refreshNotifications(userId);
+      });
+    }
+
+    return widget.child;
   }
 }
 

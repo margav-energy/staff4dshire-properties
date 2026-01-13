@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/notification_api_service.dart';
 import '../config/api_config.dart';
+import '../utils/notification_sound_player.dart';
 
 
 class NotificationItem {
@@ -152,13 +153,13 @@ class NotificationProvider extends ChangeNotifier {
   }
   
   /// Play a notification sound (works on web)
-  /// Note: Sound implementation requires JavaScript interop - placeholder for now
+  /// Play notification sound
   void _playNotificationSound() {
-    if (kIsWeb) {
-      // TODO: Implement sound notification using Web Audio API or audio file
-      // For now, notifications will appear but without sound
-      // To implement properly, use package:js_interop or load an audio file
-      debugPrint('🔔 New notification received - sound notification placeholder');
+    try {
+      debugPrint('🔔 New notification received - playing sound');
+      NotificationSoundPlayer.playNotificationSound();
+    } catch (e) {
+      debugPrint('Error playing notification sound: $e');
     }
   }
   
@@ -177,11 +178,13 @@ class NotificationProvider extends ChangeNotifier {
   
   void _startPolling({String? userId}) {
     _currentUserId = userId;
-    // Poll for new notifications every 30 seconds
+    // Poll for new notifications every 10 seconds (more frequent for better UX)
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _checkForNewNotifications();
     });
+    // Also check immediately
+    _checkForNewNotifications();
   }
 
   Future<void> _checkForNewNotifications() async {

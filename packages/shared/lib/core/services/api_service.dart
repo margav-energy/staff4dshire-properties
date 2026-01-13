@@ -83,15 +83,37 @@ class ApiService {
   }
 
   // Generic DELETE request
-  static Future<void> delete(String endpoint) async {
+  static Future<dynamic> delete(String endpoint, [Map<String, dynamic>? data]) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$apiBaseUrl$endpoint'),
-        headers: {'Content-Type': 'application/json'},
-      );
+      final request = http.Request('DELETE', Uri.parse('$apiBaseUrl$endpoint'));
+      request.headers['Content-Type'] = 'application/json';
+      if (data != null) {
+        request.body = jsonEncode(data);
+      }
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Failed to delete: ${response.statusCode} - ${response.body}');
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isEmpty) {
+          return {'success': true};
+        }
+        return jsonDecode(response.body);
+      } else {
+        String errorMessage = 'Failed to delete: ${response.statusCode}';
+        try {
+          final errorBody = jsonDecode(response.body);
+          if (errorBody is Map<String, dynamic>) {
+            if (errorBody['error'] != null) {
+              errorMessage = errorBody['error'] as String;
+            } else if (errorBody['message'] != null) {
+              errorMessage = errorBody['message'] as String;
+            }
+          }
+        } catch (_) {
+          errorMessage = '${errorMessage} - ${response.body}';
+        }
+        throw Exception(errorMessage);
       }
     } catch (e) {
       rethrow;

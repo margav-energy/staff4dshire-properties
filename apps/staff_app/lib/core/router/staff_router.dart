@@ -26,6 +26,8 @@ import '../../features/projects/screens/project_selection_screen.dart';
 import '../../features/projects/screens/project_management_screen.dart';
 import '../../features/projects/screens/project_detail_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
+import '../../features/chat/screens/chat_list_screen.dart';
+import '../../features/chat/screens/chat_screen.dart';
 import '../../features/reports/screens/reports_screen.dart';
 import '../../features/inductions/screens/induction_management_screen.dart';
 import '../../features/users/screens/user_management_screen.dart';
@@ -170,6 +172,25 @@ class StaffRouter {
       GoRoute(
         path: '/dashboard',
         builder: (context, state) {
+          // Get actual user role from AuthProvider instead of query parameter
+          try {
+            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+            final currentUser = authProvider.currentUser;
+            if (currentUser != null) {
+              if (currentUser.isSuperadmin || currentUser.role == UserRole.superadmin) {
+                return const SuperAdminDashboardScreen();
+              } else if (currentUser.role == UserRole.admin) {
+                return const AdminDashboardScreen();
+              } else if (currentUser.role == UserRole.supervisor) {
+                return const SupervisorDashboardScreen();
+              } else {
+                return const StaffDashboardScreen();
+              }
+            }
+          } catch (e) {
+            // Fallback to query parameter if provider not available
+          }
+          // Fallback to query parameter
           final userRole = state.uri.queryParameters['role'] ?? 'staff';
           switch (userRole) {
             case 'superadmin':
@@ -233,6 +254,17 @@ class StaffRouter {
       GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/chat',
+        builder: (context, state) => const ChatListScreen(),
+      ),
+      GoRoute(
+        path: '/chat/:conversationId',
+        builder: (context, state) {
+          final conversationId = state.pathParameters['conversationId']!;
+          return ChatScreen(conversationId: conversationId);
+        },
       ),
       GoRoute(
         path: '/reports',

@@ -158,6 +158,33 @@ class _AddEditUserScreenState extends State<AddEditUserScreen> {
   Future<void> _saveUser() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Validate password is provided for new users
+    if (!isEditing) {
+      final password = _passwordController.text.trim();
+      if (password.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Password is required'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      if (password.length < 6) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Password must be at least 6 characters'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     // Prevent non-superadmins from assigning superadmin role
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = authProvider.currentUser;
@@ -169,6 +196,22 @@ class _AddEditUserScreenState extends State<AddEditUserScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('You do not have permission to assign superadmin role'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Get company ID from current user (required for non-superadmin users)
+    final companyId = currentUser?.companyId;
+    
+    // Validate company ID is required for non-superadmin users
+    if (_selectedRole != UserRole.superadmin && companyId == null && !isEditing) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Company ID is required for non-superadmin users'),
             backgroundColor: Colors.red,
           ),
         );
@@ -207,6 +250,7 @@ class _AddEditUserScreenState extends State<AddEditUserScreen> {
       photoUrl: photoUrl,
       isActive: _isActive,
       lastLogin: widget.user?.lastLogin,
+      companyId: widget.user?.companyId ?? companyId, // Use existing companyId if editing, otherwise use current user's companyId
     );
 
     // Return user, password, and photo info
@@ -215,9 +259,10 @@ class _AddEditUserScreenState extends State<AddEditUserScreen> {
       Navigator.pop(context, user);
     } else {
       // For creating, return a map with user, password, and photo
+      final password = _passwordController.text.trim();
       Navigator.pop(context, {
         'user': user,
-        'password': _passwordController.text,
+        'password': password,
         'photo': _selectedPhoto,
         'photoPath': _photoPath,
       });

@@ -330,25 +330,26 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<UserModel> addUser(UserModel user, {String? password}) async {
+  Future<UserModel> addUser(UserModel user, {String? password, String? userId}) async {
     // Check if user with same email already exists
     if (_users.any((u) => u.email.toLowerCase() == user.email.toLowerCase())) {
       throw Exception('User with this email already exists');
     }
     
+    // Validate password is provided for new users
+    if ((password == null || password.trim().isEmpty)) {
+      throw Exception('Password is required for new users');
+    }
+    
     // CRITICAL: Save to API/database FIRST (source of truth)
     if (ApiConfig.isApiEnabled) {
       try {
-        // Hash password if provided (for now, just pass plain text - backend should hash it)
-        // TODO: Implement proper password hashing
-        String? passwordHash = password;
-        if (password != null && password.isNotEmpty) {
-          // For now, pass plain password as hash (backend should hash it)
-          // In production, use: import 'dart:convert'; import 'package:crypto/crypto.dart';
-          passwordHash = password; // Backend should hash this
-        }
-        
-        final createdUser = await UserApiService.createUser(user, passwordHash: passwordHash);
+        // Pass plain password - backend will hash it
+        final createdUser = await UserApiService.createUser(
+          user, 
+          passwordHash: password.trim(),
+          userId: userId,
+        );
         _users.add(createdUser);
         // Save to local storage as cache only AFTER successful API save
         await _saveToStorage();
@@ -457,6 +458,23 @@ class UserProvider extends ChangeNotifier {
   Future<void> updateUserPhoto(String id, String? photoUrl) async {
     final index = _users.indexWhere((u) => u.id == id);
     if (index == -1) return;
+
+    // If a legacy "pref:" reference is provided, try to expand it to a base64 data URL
+    // before saving to the database (so other users can actually see the image).
+    String? finalPhotoUrl = photoUrl;
+    if (finalPhotoUrl != null && finalPhotoUrl.startsWith('pref:')) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final key = finalPhotoUrl.replaceFirst('pref:', '');
+        final base64Data = prefs.getString(key);
+        if (base64Data != null && base64Data.isNotEmpty) {
+          // Default to jpeg; callers that know the mime type should pass a full data URL instead.
+          finalPhotoUrl = 'data:image/jpeg;base64,$base64Data';
+        }
+      } catch (_) {
+        // If we can't expand it, keep as-is (but this will not be visible to other users)
+      }
+    }
     
     final user = _users[index];
     final updatedUser = UserModel(
@@ -466,7 +484,7 @@ class UserProvider extends ChangeNotifier {
       lastName: user.lastName,
       role: user.role,
       phoneNumber: user.phoneNumber,
-      photoUrl: photoUrl,
+      photoUrl: finalPhotoUrl,
       isActive: user.isActive,
       lastLogin: user.lastLogin,
     );
@@ -474,7 +492,7 @@ class UserProvider extends ChangeNotifier {
     // CRITICAL: Save to API/database FIRST (source of truth)
     if (ApiConfig.isApiEnabled) {
       try {
-        final updatedUserFromApi = await UserApiService.updateUserPhoto(id, photoUrl);
+        final updatedUserFromApi = await UserApiService.updateUserPhoto(id, finalPhotoUrl);
         _users[index] = updatedUserFromApi;
         // Save to local storage as cache only AFTER successful API save
         await _saveToStorage();

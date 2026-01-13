@@ -39,16 +39,21 @@ class UserApiService {
 
   // Convert UserModel to backend API format
   static Map<String, dynamic> _toApiJson(UserModel user) {
+    final roleString = user.role.toString().split('.').last;
+    // Ensure role is one of the valid values
+    final validRoles = ['superadmin', 'admin', 'supervisor', 'staff'];
+    final role = validRoles.contains(roleString) ? roleString : 'staff';
+    
     return {
-      'email': user.email,
-      'first_name': user.firstName,
-      'last_name': user.lastName,
-      'role': user.role.toString().split('.').last,
-      'phone_number': user.phoneNumber,
+      'email': user.email.trim(),
+      'first_name': user.firstName.trim(),
+      'last_name': user.lastName.trim(),
+      'role': role,
+      'phone_number': user.phoneNumber?.trim().isEmpty == true ? null : user.phoneNumber?.trim(),
       'photo_url': user.photoUrl,
       'company_id': user.companyId,
       'is_superadmin': user.isSuperadmin || user.role == UserRole.superadmin,
-      'is_active': user.isActive,
+      'is_active': user.isActive ?? true,
       if (user.lastLogin != null) 'last_login': user.lastLogin!.toIso8601String(),
     };
   }
@@ -139,18 +144,48 @@ class UserApiService {
   }
 
   /// Create user via API
-  static Future<UserModel> createUser(UserModel user, {String? passwordHash}) async {
+  static Future<UserModel> createUser(UserModel user, {String? passwordHash, String? userId}) async {
     try {
       if (!ApiConfig.isApiEnabled) {
         throw Exception('API is disabled');
       }
 
       final data = _toApiJson(user);
-      if (passwordHash != null) {
-        data['password_hash'] = passwordHash;
+      // Send as 'password' (plain text) so backend can hash it properly
+      // Backend will hash it before saving
+      if (passwordHash != null && passwordHash.isNotEmpty) {
+        data['password'] = passwordHash; // Send as plain password, backend will hash it
+      } else {
+        throw Exception('Password is required');
+      }
+      
+      // Include userId in query params so backend can get company_id
+      String endpoint = '/users';
+      if (userId != null && userId.isNotEmpty) {
+        endpoint += '?userId=$userId';
       }
 
-      final response = await ApiService.post('/users', data);
+      // Validate required fields before sending
+      if (data['email']?.toString().trim().isEmpty ?? true) {
+        throw Exception('Email is required');
+      }
+      if (data['first_name']?.toString().trim().isEmpty ?? true) {
+        throw Exception('First name is required');
+      }
+      if (data['last_name']?.toString().trim().isEmpty ?? true) {
+        throw Exception('Last name is required');
+      }
+      if (data['role']?.toString().trim().isEmpty ?? true) {
+        throw Exception('Role is required');
+      }
+      if (!data.containsKey('password') || (data['password']?.toString().trim().isEmpty ?? true)) {
+        throw Exception('Password is required');
+      }
+
+      print('[UserApiService] Creating user with data: email=${data['email']}, first_name=${data['first_name']}, last_name=${data['last_name']}, role=${data['role']}, has_password=${data.containsKey('password')}, password_length=${data['password']?.toString().length ?? 0}, userId=$userId');
+      print('[UserApiService] Full data being sent: ${jsonEncode(data)}');
+
+      final response = await ApiService.post(endpoint, data);
       
       if (response is Map<String, dynamic>) {
         return _fromApiJson(response);
@@ -158,7 +193,7 @@ class UserApiService {
       
       throw Exception('Invalid response from API');
     } catch (e) {
-      print('UserApiService.createUser error: $e');
+      print('[UserApiService] createUser error: $e');
       rethrow;
     }
   }

@@ -30,17 +30,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
-  bool _isUsingInvitationCode = false;
+  bool _isUsingInvitationCode = true; // Changed to true - invitation code is now required
   String? _photoPath;
   XFile? _selectedPhoto;
   List<Company> _companies = [];
   String? _selectedCompanyId;
   bool _isLoadingCompanies = false;
+  bool _isValidatingCode = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCompanies();
+    // No longer loading companies - invitation code is required
   }
 
   @override
@@ -54,28 +55,60 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  Future<void> _loadCompanies() async {
+  Future<void> _validateInvitationCode(String code) async {
+    if (code.trim().isEmpty) return;
+    
     setState(() {
-      _isLoadingCompanies = true;
+      _isValidatingCode = true;
     });
 
     try {
-      final companies = await CompanyApiService.getCompanies();
+      final invitation = await CompanyInvitationApiService.getInvitationByToken(code.toUpperCase());
+      
+      if (invitation.isExpired) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This invitation code has expired. Please request a new one.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      if (invitation.isUsed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This invitation code has already been used.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Pre-fill email from invitation
+      if (_emailController.text.trim().isEmpty) {
+        _emailController.text = invitation.email;
+      }
+      
       setState(() {
-        _companies = companies.where((c) => c.isActive).toList();
-        _isLoadingCompanies = false;
+        _selectedCompanyId = invitation.companyId;
       });
+      
     } catch (e) {
+      // Invalid code - clear company selection
+      setState(() {
+        _selectedCompanyId = null;
+      });
+      // Don't show error for every keystroke - only on submit
+    } finally {
       if (mounted) {
         setState(() {
-          _isLoadingCompanies = false;
+          _isValidatingCode = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load companies: ${e.toString()}'),
-            backgroundColor: Colors.orange,
-          ),
-        );
       }
     }
   }
@@ -187,87 +220,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       
-      // Check if using invitation code
-      CompanyInvitation? invitation;
-      String? invitationEmail;
-      UserRole? invitationRole;
-      String? companyId;
-      
-      if (_isUsingInvitationCode && _invitationCodeController.text.trim().isNotEmpty) {
-        try {
-          final code = _invitationCodeController.text.trim().toUpperCase();
-          invitation = await CompanyInvitationApiService.getInvitationByToken(code);
-          
-          if (invitation.isExpired || invitation.isUsed) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Invalid or expired invitation code. Please check and try again.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            setState(() {
-              _isLoading = false;
-            });
-            return;
-          }
-          
-          invitationEmail = invitation.email;
-          // Convert string role to UserRole enum
-          switch (invitation.role.toLowerCase()) {
-            case 'superadmin':
-              invitationRole = UserRole.superadmin;
-              break;
-            case 'admin':
-              invitationRole = UserRole.admin;
-              break;
-            case 'supervisor':
-              invitationRole = UserRole.supervisor;
-              break;
-            case 'staff':
-            default:
-              invitationRole = UserRole.staff;
-              break;
-          }
-          companyId = invitation.companyId;
-          _selectedCompanyId = invitation.companyId; // Pre-select company from invitation
-          
-          // Pre-fill email if it matches invitation
-          if (_emailController.text.trim().isEmpty) {
-            _emailController.text = invitationEmail;
-          } else if (_emailController.text.trim().toLowerCase() != invitationEmail.toLowerCase()) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Email does not match invitation. Please use the email from your invitation.'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            setState(() {
-              _isLoading = false;
-            });
-            return;
-          }
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to validate invitation code: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          setState(() {
-            _isLoading = false;
-          });
-          return;
-        }
-      }
-      
-      // Use selected company ID (from invitation or dropdown)
-      final finalCompanyId = companyId ?? _selectedCompanyId;
-      
-      // Validate company selection for non-invitation registrations
-      if (!_isUsingInvitationCode && (finalCompanyId == null || finalCompanyId.isEmpty)) {
+      // Invitation code is now required for staff/supervisor registration (for confidentiality)
+      if (_invitationCodeController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please select your company'),
+            content: Text('Invitation code is required. Please enter your invitation code.'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -276,6 +233,93 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
         return;
       }
+      
+      // Validate invitation code
+      CompanyInvitation? invitation;
+      String? invitationEmail;
+      UserRole? invitationRole;
+      String? companyId;
+      
+      try {
+        final code = _invitationCodeController.text.trim().toUpperCase();
+        invitation = await CompanyInvitationApiService.getInvitationByToken(code);
+        
+        if (invitation.isExpired || invitation.isUsed) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid or expired invitation code. Please check and try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+        
+        invitationEmail = invitation.email;
+        // Convert string role to UserRole enum
+        switch (invitation.role.toLowerCase()) {
+          case 'superadmin':
+            invitationRole = UserRole.superadmin;
+            break;
+          case 'admin':
+            invitationRole = UserRole.admin;
+            break;
+          case 'supervisor':
+            invitationRole = UserRole.supervisor;
+            break;
+          case 'staff':
+          default:
+            invitationRole = UserRole.staff;
+            break;
+        }
+        companyId = invitation.companyId;
+        _selectedCompanyId = invitation.companyId;
+        
+        // Pre-fill email if it matches invitation
+        if (_emailController.text.trim().isEmpty) {
+          _emailController.text = invitationEmail;
+        } else if (_emailController.text.trim().toLowerCase() != invitationEmail.toLowerCase()) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Email does not match invitation. Please use the email from your invitation.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to validate invitation code: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      // Validate that we have a company ID from the invitation
+      if (companyId == null || companyId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid invitation code. Please check your code and try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      final finalCompanyId = companyId;
       
       // Create user first via API to get the database-generated UUID
       final userModel = UserModel(
@@ -649,35 +693,67 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   
                   const SizedBox(height: 16),
                   
-                  // Invitation Code Section (Optional)
+                  // Invitation Code Section (Required for confidentiality)
                   Card(
-                    color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
-                    child: ExpansionTile(
-                      leading: const Icon(Icons.confirmation_number),
-                      title: const Text('Have an invitation code?'),
-                      subtitle: const Text('Enter code from your invitation email'),
-                      initiallyExpanded: false,
-                      onExpansionChanged: (expanded) {
-                        setState(() {
-                          _isUsingInvitationCode = expanded;
-                        });
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: TextFormField(
+                      controller: _invitationCodeController,
+                      decoration: InputDecoration(
+                        labelText: 'Invitation Code *',
+                        hintText: 'Enter code (e.g., 4TFW2J3N-P3JN-UX9E)',
+                        prefixIcon: Icon(Icons.confirmation_number, color: theme.colorScheme.primary),
+                        suffixIcon: _isValidatingCode
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        helperText: 'Enter the invitation code provided by your company',
+                      ),
+                      textCapitalization: TextCapitalization.characters,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Invitation code is required';
+                        }
+                        return null;
                       },
+                      onChanged: (value) async {
+                        // Auto-validate invitation code when user types
+                        if (value.trim().length >= 8) {
+                          await _validateInvitationCode(value.trim());
+                        }
+                      },
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Info message about invitation codes
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: Row(
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: TextFormField(
-                            controller: _invitationCodeController,
-                            decoration: InputDecoration(
-                              labelText: 'Invitation Code',
-                              hintText: 'Enter code (e.g., 4TFW2J3N-P3JN-UX9E)',
-                              prefixIcon: const Icon(Icons.code),
-                              border: const OutlineInputBorder(),
-                              helperText: 'Enter the invitation code from your email',
+                        Icon(Icons.info_outline, size: 16, color: theme.colorScheme.secondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'For confidentiality, an invitation code from your company is required to register.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.secondary,
                             ),
-                            textCapitalization: TextCapitalization.characters,
-                            onChanged: (value) {
-                              setState(() {}); // Trigger rebuild
-                            },
                           ),
                         ),
                       ],
@@ -685,58 +761,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   
                   const SizedBox(height: 16),
-                  
-                  // Company Selection (only show if not using invitation code)
-                  if (!_isUsingInvitationCode || _invitationCodeController.text.trim().isEmpty) ...[
-                    Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedCompanyId,
-                        decoration: InputDecoration(
-                          labelText: 'Company *',
-                          hintText: 'Select your company',
-                          prefixIcon: Icon(Icons.business, color: theme.colorScheme.primary),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
-                        ),
-                        items: _isLoadingCompanies
-                            ? [
-                                const DropdownMenuItem<String>(
-                                  value: null,
-                                  child: Text('Loading companies...'),
-                                  enabled: false,
-                                ),
-                              ]
-                            : _companies.map((company) {
-                                return DropdownMenuItem<String>(
-                                  value: company.id,
-                                  child: Text(company.name),
-                                );
-                              }).toList(),
-                        onChanged: _isLoadingCompanies
-                            ? null
-                            : (value) {
-                                setState(() {
-                                  _selectedCompanyId = value;
-                                });
-                              },
-                        validator: (value) {
-                          if (!_isUsingInvitationCode && (value == null || value.isEmpty)) {
-                            return 'Please select your company';
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
                   
                   // Email Field
                   Card(

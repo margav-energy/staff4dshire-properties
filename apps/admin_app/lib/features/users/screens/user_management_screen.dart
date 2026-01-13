@@ -1,13 +1,9 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:staff4dshire_shared/shared.dart';
 import 'package:flutter/foundation.dart';
 import 'package:staff4dshire_shared/shared.dart';
 import 'package:provider/provider.dart';
-import 'package:staff4dshire_shared/shared.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:staff4dshire_shared/shared.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:staff4dshire_shared/shared.dart';
 import 'dart:convert';
 import 'add_edit_user_screen.dart';
 import 'user_detail_screen.dart';
@@ -87,6 +83,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       appBar: AppBar(
         title: const Text('User Management'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code),
+            tooltip: 'Generate Invitation Code',
+            onPressed: () => _showGenerateInvitationDialog(context),
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: 'Add User',
@@ -370,8 +371,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       final selectedPhoto = result['photo'] as XFile?;
       
       try {
+        // Get current user's ID to pass to backend for company_id lookup
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final currentUserId = authProvider.currentUser?.id;
+        
         // Create user first via API to get database UUID
-        final createdUser = await userProvider.addUser(user, password: password);
+        final createdUser = await userProvider.addUser(
+          user, 
+          password: password,
+          userId: currentUserId,
+        );
         
         // Save photo with database UUID if photo was selected
         if (selectedPhoto != null) {
@@ -463,6 +472,295 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         }
       }
     }
+  }
+
+  Future<void> _showGenerateInvitationDialog(BuildContext context) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUser = authProvider.currentUser;
+    final companyId = currentUser?.companyId;
+    
+    if (companyId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to generate invitation: Company ID not found'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Get company name from CompanyProvider
+    String? companyName;
+    try {
+      final companyProvider = Provider.of<CompanyProvider>(context, listen: false);
+      final company = companyProvider.getCompanyById(companyId);
+      companyName = company?.name;
+    } catch (e) {
+      debugPrint('Error getting company name: $e');
+    }
+
+    final emailController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final selectedRole = [UserRole.staff]; // Use a list to hold the value
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Generate Invitation Code'),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (companyName != null) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.business, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Company: $companyName',
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                      ],
+                      Text(
+                        'Role',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      RadioListTile<UserRole>(
+                        title: const Text('Staff'),
+                        value: UserRole.staff,
+                        groupValue: selectedRole[0],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              selectedRole[0] = value;
+                            });
+                          }
+                        },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      RadioListTile<UserRole>(
+                        title: const Text('Supervisor'),
+                        value: UserRole.supervisor,
+                        groupValue: selectedRole[0],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              selectedRole[0] = value;
+                            });
+                          }
+                        },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Email (Optional)',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: emailController,
+                        decoration: const InputDecoration(
+                          hintText: 'Enter email address (optional)',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value != null && value.isNotEmpty) {
+                            if (!value.contains('@')) {
+                              return 'Please enter a valid email address';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'If no email is provided, a general invitation code will be generated.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (!formKey.currentState!.validate()) return;
+                    Navigator.pop(dialogContext, {
+                      'role': selectedRole[0],
+                      'email': emailController.text.trim(),
+                    });
+                  },
+                  child: const Text('Generate'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    emailController.dispose();
+
+    if (result == null) return;
+
+    final role = result['role'] as UserRole? ?? UserRole.staff;
+    final email = result['email'] as String? ?? '';
+
+    // Show loading
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      // Generate unique email if not provided
+      final invitationEmail = email.isEmpty 
+          ? 'invite-${DateTime.now().millisecondsSinceEpoch}@staff4dshire.local'
+          : email;
+
+      final invitation = await CompanyInvitationApiService.createInvitation(
+        companyId: companyId!,
+        email: invitationEmail,
+        role: role == UserRole.staff ? 'staff' : 'supervisor',
+        invitedById: currentUser?.id,
+        expiresInDays: 30,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+
+      // Get company name from invitation if not already fetched
+      final displayCompanyName = invitation.companyName ?? companyName ?? 'Your Company';
+
+      // Show invitation code dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (resultContext) => AlertDialog(
+          title: const Text('Invitation Code Generated'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Company: $displayCompanyName',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Role: ${role == UserRole.staff ? "Staff" : "Supervisor"}',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                if (email.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Email: $email',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Invitation Code',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        invitation.invitationToken,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Share this code with ${role == UserRole.staff ? "staff" : "supervisor"} members. They will need to enter it when registering.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Expires: ${_formatDate(invitation.expiresAt)}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(resultContext),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating invitation: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   Future<void> _showEditUserDialog(BuildContext context, UserModel user) async {
@@ -758,10 +1056,15 @@ class _OnboardingStatusChipState extends State<_OnboardingStatusChip> {
   @override
   void initState() {
     super.initState();
-    _checkOnboardingStatus();
+    // Defer async operations to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkOnboardingStatus();
+    });
   }
 
   Future<void> _checkOnboardingStatus() async {
+    if (!mounted) return;
+    
     final onboardingProvider = Provider.of<OnboardingProvider>(context, listen: false);
     
     try {

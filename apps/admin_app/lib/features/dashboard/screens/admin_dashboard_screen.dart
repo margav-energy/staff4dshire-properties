@@ -12,6 +12,7 @@ import 'package:staff4dshire_shared/shared.dart';
 import '../widgets/welcome_banner.dart';
 import '../widgets/live_jobs_section.dart';
 import '../widgets/invoice_jobs_section.dart';
+import '../../../core/widgets/bottom_nav_bar.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -41,6 +42,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         projectProvider.loadProjects(userId: userId);
         companyProvider.loadCompanies(userId: userId);
         notificationProvider.refreshNotifications(userId);
+        
+        // Initialize ChatProvider to show badges
+        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        chatProvider.initialize(userId);
       }
       documentProvider.loadDocuments();
       // Timesheet data is already loaded
@@ -603,6 +608,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         );
       },
+      ),
+      bottomNavigationBar: Builder(
+        builder: (context) {
+          final currentPath = GoRouterState.of(context).uri.path;
+          return BottomNavBar(currentPath: currentPath);
+        },
       ),
     );
   }

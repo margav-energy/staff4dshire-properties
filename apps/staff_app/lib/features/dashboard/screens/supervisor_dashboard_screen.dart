@@ -9,6 +9,7 @@ import '../../timesheet/screens/timesheet_entry_detail_screen.dart';
 import '../../projects/screens/project_selection_screen.dart';
 import '../widgets/welcome_banner.dart';
 import '../widgets/live_jobs_section.dart';
+import '../../../core/widgets/bottom_nav_bar.dart';
 
 class SupervisorDashboardScreen extends StatefulWidget {
   const SupervisorDashboardScreen({super.key});
@@ -1044,6 +1045,12 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: Builder(
+        builder: (context) {
+          final currentPath = GoRouterState.of(context).uri.path;
+          return BottomNavBar(currentPath: currentPath);
+        },
       ),
     );
   }

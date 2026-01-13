@@ -79,6 +79,9 @@ dependencies:
   
   # State Management (additional)
   riverpod: ^2.4.9
+  
+  # Audio Playback
+  audioplayers: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -87,6 +90,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  
+  assets:
+    - assets/notification_sound.mp3
 
 
 

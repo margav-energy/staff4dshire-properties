@@ -16,6 +16,9 @@ dependencies:
   # HTTP & API
   http: ^1.1.2
   
+  # WebSocket for real-time chat
+  socket_io_client: ^2.0.3+1
+  
   # Local Storage
   shared_preferences: ^2.2.2
   
@@ -27,6 +30,12 @@ dependencies:
   
   # Image Handling
   image_picker: ^1.0.5
+  
+  # File Handling
+  file_picker: ^6.1.1
+  
+  # Audio Playback
+  audioplayers: ^5.2.1
   
   # Utilities
   crypto: ^3.0.5

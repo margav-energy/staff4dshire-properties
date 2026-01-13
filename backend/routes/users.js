@@ -2,7 +2,54 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcrypt');
 const { buildCompanyWhereClause, canAccessCompany } = require('../middleware/companyFilter');
+
+// GET user photo by ID (must come before /:id route)
+router.get('/:id/photo', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get user's photo_url
+    const result = await pool.query(
+      'SELECT photo_url FROM users WHERE id = $1',
+      [id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const photoUrl = result.rows[0].photo_url;
+    
+    // If photo_url is a base64 data URL, return it directly
+    if (photoUrl && photoUrl.startsWith('data:image')) {
+      // Extract base64 data and mime type
+      const matches = photoUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+      if (matches) {
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        res.setHeader('Content-Type', `image/${mimeType}`);
+        res.setHeader('Content-Length', buffer.length);
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+        return res.send(buffer);
+      }
+    }
+    
+    // If photo_url is a network URL, redirect to it
+    if (photoUrl && (photoUrl.startsWith('http://') || photoUrl.startsWith('https://'))) {
+      return res.redirect(photoUrl);
+    }
+    
+    // If pref: URL or no photo, return 404
+    return res.status(404).json({ error: 'Photo not found' });
+  } catch (error) {
+    console.error('Error fetching user photo:', error);
+    res.status(500).json({ error: 'Failed to fetch photo' });
+  }
+});
 
 // GET all users (filtered by company unless superadmin)
 router.get('/', async (req, res) => {
@@ -47,26 +94,28 @@ router.get('/', async (req, res) => {
             // User has no company_id - return empty list
             query += ' WHERE 1=0'; // Always false condition
             params = [];
-            console.log('[USERS API] User has no company_id, returning empty list');
+            console.log('[USERS API] User has no company_id - returning empty list');
           }
         } else {
-          console.log('[USERS API] Superadmin detected, returning all users');
+          console.log('[USERS API] Superadmin detected - returning all users');
         }
       } else {
         console.log('[USERS API] User not found for userId:', userId);
       }
     } else {
-      console.log('[USERS API] No userId provided, returning all users');
+      console.log('[USERS API] No userId provided - returning all users');
     }
     
     query += ' ORDER BY created_at DESC';
-    console.log('[USERS API] Final query:', query, 'Params:', params);
+    
     const result = await pool.query(query, params);
-    console.log('[USERS API] Returning', result.rows.length, 'users');
+    
+    console.log(`[USERS API] Returning ${result.rows.length} users`);
+    
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Failed to fetch users' });
+    res.status(500).json({ error: 'Failed to fetch users', message: error.message });
   }
 });
 
@@ -87,29 +136,13 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// GET user by email
-router.get('/email/:email', async (req, res) => {
-  try {
-    const { email } = req.params;
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error fetching user by email:', error);
-    res.status(500).json({ error: 'Failed to fetch user' });
-  }
-});
-
-// POST create new user
+// POST create user
 router.post('/', async (req, res) => {
   try {
     const {
       email,
-      password_hash,
+      password,
+      password_hash, // Allow pre-hashed passwords
       first_name,
       last_name,
       role,
@@ -117,31 +150,55 @@ router.post('/', async (req, res) => {
       photo_url,
       is_active = true,
       company_id,
-      is_superadmin = false
+      created_by_user_id, // User ID of the admin creating this user (for company context)
     } = req.body;
 
-    if (!email || !password_hash || !first_name || !last_name || !role) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    // Validate required fields
+    if (!email || !first_name || !last_name || !role) {
+      return res.status(400).json({ error: 'Missing required fields: email, first_name, last_name, role' });
     }
 
-    // Determine company_id if not provided
+    // Check if password or password_hash is provided
+    if (!password && !password_hash) {
+      return res.status(400).json({ error: 'Either password or password_hash must be provided' });
+    }
+
+    // Hash password if provided (not already hashed)
+    let hashedPassword;
+    if (password) {
+      const saltRounds = 10;
+      hashedPassword = await bcrypt.hash(password.trim(), saltRounds);
+      console.log('[USERS API] Password hashed successfully');
+    } else {
+      hashedPassword = password_hash;
+      console.log('[USERS API] Using provided password_hash');
+    }
+
+    // Determine company_id
     let finalCompanyId = company_id;
-    const userId = req.query.userId || req.body.created_by_user_id;
     
-    if (!finalCompanyId && userId) {
-      // Get creator's company_id
+    // If company_id not provided, try to get it from the creating user
+    if (!finalCompanyId && created_by_user_id) {
       const creatorResult = await pool.query(
         'SELECT company_id FROM users WHERE id = $1',
-        [userId]
+        [created_by_user_id]
       );
-      if (creatorResult.rows.length > 0) {
+      if (creatorResult.rows.length > 0 && creatorResult.rows[0].company_id) {
         finalCompanyId = creatorResult.rows[0].company_id;
+        console.log('[USERS API] Using creator\'s company_id:', finalCompanyId);
       }
     }
     
-    // Validate: non-superadmin users must have a company_id
-    if (role !== 'superadmin' && !is_superadmin && !finalCompanyId) {
-      return res.status(400).json({ error: 'Company ID is required for non-superadmin users' });
+    // Also check req.query.userId as fallback
+    if (!finalCompanyId && req.query.userId) {
+      const creatorResult = await pool.query(
+        'SELECT company_id FROM users WHERE id = $1',
+        [req.query.userId]
+      );
+      if (creatorResult.rows.length > 0 && creatorResult.rows[0].company_id) {
+        finalCompanyId = creatorResult.rows[0].company_id;
+        console.log('[USERS API] Using query userId\'s company_id:', finalCompanyId);
+      }
     }
 
     const id = uuidv4();
@@ -149,16 +206,16 @@ router.post('/', async (req, res) => {
       `INSERT INTO users (id, email, password_hash, first_name, last_name, role, phone_number, photo_url, is_active, company_id, is_superadmin)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [id, email, password_hash, first_name, last_name, role, phone_number || null, photo_url || null, is_active, finalCompanyId || null, is_superadmin || role === 'superadmin']
+      [id, email, hashedPassword, first_name, last_name, role, phone_number || null, photo_url || null, is_active, finalCompanyId || null, is_superadmin || role === 'superadmin']
     );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    if (error.code === '23505') { // Unique violation
-      return res.status(409).json({ error: 'User with this email already exists' });
+    if (error.code === '23505') { // Unique constraint violation
+      return res.status(400).json({ error: 'Email already exists' });
     }
     console.error('Error creating user:', error);
-    res.status(500).json({ error: 'Failed to create user' });
+    res.status(500).json({ error: 'Failed to create user', message: error.message });
   }
 });
 
@@ -174,11 +231,11 @@ router.put('/:id', async (req, res) => {
       phone_number,
       photo_url,
       is_active,
-      password_hash
+      password_hash,
     } = req.body;
 
-    let updateFields = [];
-    let values = [];
+    const updateFields = [];
+    const values = [];
     let paramIndex = 1;
 
     if (email !== undefined) {
@@ -255,4 +312,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-

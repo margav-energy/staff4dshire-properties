@@ -29,7 +29,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       
       companyProvider.loadCompanies(userId: userId);
       // Superadmins see all users, so no userId filter needed
-      userProvider.loadUsers();
+      // Pass null explicitly instead of undefined
+      userProvider.loadUsers(userId: null);
       projectProvider.loadProjects();
     });
   }
