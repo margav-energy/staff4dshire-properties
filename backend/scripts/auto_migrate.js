@@ -154,15 +154,81 @@ async function runSchema() {
           if (fs.existsSync(multiTenantPath)) {
             const multiTenantSchema = fs.readFileSync(multiTenantPath, 'utf8');
             try {
+              // Execute multi-tenant schema
               await pool.query(multiTenantSchema);
               console.log('✅ Multi-tenant schema applied successfully!');
+              
+              // Verify columns were added
+              const verifyCheck = await pool.query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name IN ('company_id', 'is_superadmin')
+              `);
+              console.log(`✅ Verified ${verifyCheck.rows.length} multi-tenant columns added.`);
             } catch (mtError) {
               console.log(`⚠️  Multi-tenant migration had errors: ${mtError.message.substring(0, 200)}`);
-              // Continue anyway - some columns might already exist
+              // Try to add columns manually if schema fails
+              try {
+                console.log('🔄 Attempting to add columns manually...');
+                await pool.query(`
+                  ALTER TABLE users 
+                  ADD COLUMN IF NOT EXISTS company_id UUID,
+                  ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN DEFAULT FALSE;
+                `);
+                await pool.query(`
+                  ALTER TABLE users 
+                  DROP CONSTRAINT IF EXISTS users_role_check;
+                `);
+                await pool.query(`
+                  ALTER TABLE users 
+                  ADD CONSTRAINT users_role_check 
+                  CHECK (role IN ('staff', 'supervisor', 'admin', 'superadmin'));
+                `);
+                console.log('✅ Manually added multi-tenant columns and updated role constraint.');
+              } catch (manualError) {
+                console.log(`⚠️  Manual column addition failed: ${manualError.message.substring(0, 200)}`);
+              }
+            }
+          } else {
+            console.log('⚠️  schema_multi_tenant.sql not found. Adding columns manually...');
+            try {
+              await pool.query(`
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS company_id UUID,
+                ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN DEFAULT FALSE;
+              `);
+              await pool.query(`
+                ALTER TABLE users 
+                DROP CONSTRAINT IF EXISTS users_role_check;
+              `);
+              await pool.query(`
+                ALTER TABLE users 
+                ADD CONSTRAINT users_role_check 
+                CHECK (role IN ('staff', 'supervisor', 'admin', 'superadmin'));
+              `);
+              console.log('✅ Manually added multi-tenant columns.');
+            } catch (manualError) {
+              console.log(`⚠️  Manual column addition failed: ${manualError.message}`);
             }
           }
         } else {
           console.log('✅ Multi-tenant columns already exist.');
+          
+          // Still check and update role constraint to include superadmin
+          try {
+            await pool.query(`
+              ALTER TABLE users 
+              DROP CONSTRAINT IF EXISTS users_role_check;
+            `);
+            await pool.query(`
+              ALTER TABLE users 
+              ADD CONSTRAINT users_role_check 
+              CHECK (role IN ('staff', 'supervisor', 'admin', 'superadmin'));
+            `);
+            console.log('✅ Updated role constraint to include superadmin.');
+          } catch (constraintError) {
+            // Constraint might already be correct, ignore
+          }
         }
       } catch (checkError) {
         console.log('⚠️  Could not check for multi-tenant columns:', checkError.message);

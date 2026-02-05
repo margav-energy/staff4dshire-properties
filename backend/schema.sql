@@ -11,7 +11,7 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('staff', 'supervisor', 'admin')),
+    role VARCHAR(50) NOT NULL CHECK (role IN ('staff', 'supervisor', 'admin', 'superadmin')),
     phone_number VARCHAR(20),
     photo_url VARCHAR(500),
     is_active BOOLEAN DEFAULT TRUE,

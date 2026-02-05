@@ -12,14 +12,20 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Verify connection configuration
-transporter.verify(function (error, success) {
-  if (error) {
-    console.log('Email service configuration error:', error);
-  } else {
-    console.log('Email service is ready to send messages');
-  }
-});
+// Verify connection configuration (non-blocking, only if SMTP is configured)
+if (process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+  transporter.verify(function (error, success) {
+    if (error) {
+      console.log('⚠️  Email service configuration error (emails will not be sent):', error.message);
+      console.log('   This is OK if you plan to share invitation codes manually.');
+    } else {
+      console.log('✅ Email service is ready to send messages');
+    }
+  });
+} else {
+  console.log('ℹ️  Email service not configured (SMTP_USER/SMTP_PASSWORD not set)');
+  console.log('   Invitation codes can still be shared manually.');
+}
 
 /**
  * Send invitation email
