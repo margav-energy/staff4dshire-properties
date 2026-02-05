@@ -119,6 +119,28 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET user by email (helper endpoint)
+router.get('/by-email/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    const result = await pool.query(
+      'SELECT id, email, first_name, last_name, role, company_id, is_superadmin, is_active FROM users WHERE LOWER(TRIM(email)) = $1',
+      [normalizedEmail]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching user by email:', error);
+    res.status(500).json({ error: 'Failed to fetch user', message: error.message });
+  }
+});
+
 // GET user by ID
 router.get('/:id', async (req, res) => {
   try {
