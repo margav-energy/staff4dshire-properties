@@ -15,7 +15,7 @@ class ApiConfig {
   // - You don't need users' IP addresses - they all connect to the same backend!
   
   // Production API URL - UPDATE THIS WHEN DEPLOYING TO PRODUCTION
-  static const String _productionUrl = 'https://api.staff4dshire.com/api'; // TODO: Update to your production URL
+  static const String _productionUrl = 'https://staff4dshire-backend.onrender.com/api';
   
   // Development URLs for different platforms
   static const String _devWebUrl = 'http://localhost:3001/api';
