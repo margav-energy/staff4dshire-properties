@@ -125,9 +125,26 @@ async function createCompany() {
     // Check if companies table exists
     const tableExists = await checkCompaniesTableExists();
     if (!tableExists) {
-      console.log('ℹ️  Companies table does not exist. Skipping company creation.');
-      console.log('   Run schema_multi_tenant.sql migration to enable multi-tenancy.');
-      return null;
+      console.log('ℹ️  Companies table does not exist. Creating it...');
+      
+      // Create companies table if it doesn't exist (for basic multi-tenancy)
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS companies (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            name VARCHAR(255) NOT NULL,
+            email VARCHAR(255),
+            subscription_tier VARCHAR(50) DEFAULT 'premium',
+            max_users INTEGER DEFAULT 100,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        console.log('✅ Created companies table');
+      } catch (createError) {
+        console.log('⚠️  Could not create companies table:', createError.message);
+        return null;
+      }
     }
 
     // Check if demo company exists

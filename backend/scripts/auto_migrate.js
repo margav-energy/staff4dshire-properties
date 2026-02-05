@@ -56,34 +56,78 @@ async function runSchema() {
 
     const schema = fs.readFileSync(schemaPath, 'utf8');
     
-    // Execute the entire schema as one query
-    // PostgreSQL can handle multiple statements separated by semicolons
-    console.log('📝 Executing database schema (full file)...');
-    try {
-      await pool.query(schema);
-      console.log('✅ Database schema executed successfully!');
-    } catch (error) {
-      // If full execution fails, it might be because some objects already exist
-      // Try to continue anyway and verify tables were created
-      console.log(`⚠️  Schema execution had errors: ${error.message.substring(0, 200)}`);
-      console.log('🔍 Verifying if tables were created despite errors...');
+    // Split schema into parts: tables, functions, triggers
+    // This avoids issues with dollar-quoted strings in functions
+    const lines = schema.split('\n');
+    let currentSection = [];
+    const sections = [];
+    let inFunction = false;
+    let functionBody = '';
+    
+    for (const line of lines) {
+      // Skip comments
+      if (line.trim().startsWith('--')) continue;
       
-      // Check if critical tables exist
-      const criticalTables = ['users', 'projects', 'time_entries'];
-      let tablesExist = 0;
-      for (const table of criticalTables) {
-        if (await checkTableExists(table)) {
-          tablesExist++;
-        }
+      // Detect function start
+      if (line.includes('CREATE OR REPLACE FUNCTION') || line.includes('CREATE FUNCTION')) {
+        inFunction = true;
+        functionBody = line + '\n';
+        continue;
       }
       
-      if (tablesExist === criticalTables.length) {
-        console.log('✅ All critical tables exist. Schema migration successful!');
-      } else {
-        console.log(`⚠️  Only ${tablesExist}/${criticalTables.length} critical tables exist.`);
-        throw error; // Re-throw to trigger retry
+      // Collect function body
+      if (inFunction) {
+        functionBody += line + '\n';
+        // Detect function end (look for $$ language)
+        if (line.includes("$$ language") || line.includes("$$ LANGUAGE")) {
+          sections.push({ type: 'function', sql: functionBody });
+          functionBody = '';
+          inFunction = false;
+          continue;
+        }
+        continue;
+      }
+      
+      // Regular SQL statements
+      currentSection.push(line);
+      
+      // If line ends with semicolon and we're not in a function, it's a complete statement
+      if (line.trim().endsWith(';') && !inFunction) {
+        const statement = currentSection.join('\n').trim();
+        if (statement.length > 0) {
+          sections.push({ type: 'statement', sql: statement });
+        }
+        currentSection = [];
       }
     }
+    
+    // Execute sections in order
+    console.log(`📝 Executing ${sections.length} schema sections...`);
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const section of sections) {
+      try {
+        await pool.query(section.sql);
+        successCount++;
+      } catch (error) {
+        // Ignore "already exists" errors
+        if (error.message.includes('already exists') || 
+            error.code === '42P07' || // duplicate_table
+            error.code === '42710' || // duplicate_object
+            error.code === '42723') { // duplicate_function
+          successCount++;
+          continue;
+        }
+        // Log but continue for non-critical errors
+        if (!error.message.includes('does not exist')) {
+          console.error(`⚠️  Error in ${section.type}: ${error.message.substring(0, 150)}`);
+        }
+        errorCount++;
+      }
+    }
+    
+    console.log(`✅ Schema execution complete: ${successCount} succeeded, ${errorCount} errors (some may be expected)`);
 
     if (errorCount === 0) {
       console.log(`✅ Database schema created successfully! (${successCount} statements executed)`);
