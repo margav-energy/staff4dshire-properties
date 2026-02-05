@@ -10,6 +10,19 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASSWORD,
   },
+  // Connection timeout settings
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000, // 10 seconds
+  socketTimeout: 10000, // 10 seconds
+  // Retry settings
+  pool: true,
+  maxConnections: 1,
+  maxMessages: 3,
+  // TLS options for better compatibility
+  tls: {
+    rejectUnauthorized: false, // Accept self-signed certificates if needed
+    ciphers: 'SSLv3'
+  }
 });
 
 // Verify connection configuration (non-blocking, only if SMTP is configured)
