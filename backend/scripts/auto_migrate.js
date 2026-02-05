@@ -256,6 +256,9 @@ async function runSchema() {
         console.log('⚠️  Could not check for multi-tenant columns:', checkError.message);
       }
       
+      // Run additional schema files if needed
+      await runAdditionalSchemas();
+      
       console.log('✅ Schema migration complete!');
       return true;
     } else {
@@ -269,6 +272,85 @@ async function runSchema() {
     console.error('   Full error:', error);
     // Don't throw - allow server to continue, but return false
     return false;
+  }
+}
+
+async function runAdditionalSchemas() {
+  try {
+    // Check and run invitation_requests schema
+    const invitationRequestsExists = await checkTableExists('invitation_requests');
+    if (!invitationRequestsExists) {
+      console.log('📄 Running invitation_requests schema...');
+      
+      // Try migration SQL file first (uses gen_random_uuid())
+      const migrationPath = path.join(__dirname, '../migrations/add_invitation_tables.sql');
+      if (fs.existsSync(migrationPath)) {
+        try {
+          const schema = fs.readFileSync(migrationPath, 'utf8');
+          await pool.query(schema);
+          console.log('✅ invitation_requests and company_invitations tables created successfully!');
+          return; // Success, exit early
+        } catch (migrationError) {
+          console.log(`⚠️  Migration file failed: ${migrationError.message.substring(0, 150)}`);
+          // Fall through to try individual schema files
+        }
+      }
+      
+      // Fallback: Try individual schema files
+      const invitationRequestsPath = path.join(__dirname, '../schema_invitation_requests.sql');
+      if (fs.existsSync(invitationRequestsPath)) {
+        const schema = fs.readFileSync(invitationRequestsPath, 'utf8');
+        try {
+          await pool.query(schema);
+          console.log('✅ invitation_requests table created successfully!');
+        } catch (error) {
+          // If uuid_generate_v4() fails, try with gen_random_uuid()
+          if (error.message.includes('uuid_generate_v4') || error.message.includes('function uuid_generate_v4')) {
+            console.log('⚠️  uuid_generate_v4() not available, using gen_random_uuid() instead...');
+            const fixedSchema = schema.replace(/uuid_generate_v4\(\)/g, 'gen_random_uuid()');
+            await pool.query(fixedSchema);
+            console.log('✅ invitation_requests table created with gen_random_uuid()!');
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        console.log('⚠️  schema_invitation_requests.sql not found.');
+      }
+    } else {
+      console.log('✅ invitation_requests table already exists.');
+    }
+
+    // Check and run company_invitations schema
+    const companyInvitationsExists = await checkTableExists('company_invitations');
+    if (!companyInvitationsExists) {
+      console.log('📄 Running company_invitations schema...');
+      const companyInvitationsPath = path.join(__dirname, '../schema_company_invitations.sql');
+      if (fs.existsSync(companyInvitationsPath)) {
+        const schema = fs.readFileSync(companyInvitationsPath, 'utf8');
+        try {
+          await pool.query(schema);
+          console.log('✅ company_invitations table created successfully!');
+        } catch (error) {
+          // If uuid_generate_v4() fails, try with gen_random_uuid()
+          if (error.message.includes('uuid_generate_v4') || error.message.includes('function uuid_generate_v4')) {
+            console.log('⚠️  uuid_generate_v4() not available, using gen_random_uuid() instead...');
+            const fixedSchema = schema.replace(/uuid_generate_v4\(\)/g, 'gen_random_uuid()');
+            await pool.query(fixedSchema);
+            console.log('✅ company_invitations table created with gen_random_uuid()!');
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        console.log('⚠️  schema_company_invitations.sql not found.');
+      }
+    } else {
+      console.log('✅ company_invitations table already exists.');
+    }
+  } catch (error) {
+    console.log(`⚠️  Error running additional schemas: ${error.message.substring(0, 200)}`);
+    // Don't throw - these are optional schemas
   }
 }
 
