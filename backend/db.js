@@ -28,6 +28,10 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'staff4dshire',
   user: process.env.DB_USER || 'staff4dshire',
   password: process.env.DB_PASSWORD,
+  // SSL required for Render PostgreSQL databases
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false // Render uses self-signed certificates
+  } : false,
 });
 
 pool.on('error', (err) => {
