@@ -118,10 +118,29 @@ router.post('/', async (req, res) => {
           'admin',
           phone_number?.trim() || null,
           companyId,
-        true,
-        true, // Force password change on first login
-      ]
-    );
+          true,
+          true, // Force password change on first login
+        ]
+      );
+    } else {
+      // Fallback if company_id column doesn't exist
+      await client.query(
+        `INSERT INTO users 
+         (id, email, password_hash, first_name, last_name, role, phone_number, is_active, must_change_password)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          userId,
+          normalizedEmail,
+          passwordHash,
+          first_name.trim(),
+          last_name.trim(),
+          'admin',
+          phone_number?.trim() || null,
+          true,
+          true, // Force password change on first login
+        ]
+      );
+    }
 
     // Create invitation request record (marked as approved)
     const requestId = uuidv4();
