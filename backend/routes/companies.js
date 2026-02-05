@@ -90,15 +90,34 @@ router.post('/', async (req, res) => {
     let userHasCompany = false;
     
     if (userId) {
+      // Check which columns exist
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name IN ('is_superadmin', 'company_id')
+      `);
+      const existingColumns = columnCheck.rows.map(row => row.column_name);
+      const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+      const hasCompanyId = existingColumns.includes('company_id');
+      
+      // Build select query based on available columns
+      let selectColumns = ['role'];
+      if (hasIsSuperadmin) {
+        selectColumns.push('is_superadmin');
+      }
+      if (hasCompanyId) {
+        selectColumns.push('company_id');
+      }
+      
       const userResult = await pool.query(
-        'SELECT is_superadmin, role, company_id FROM users WHERE id = $1',
+        `SELECT ${selectColumns.join(', ')} FROM users WHERE id = $1`,
         [userId]
       );
       
       if (userResult.rows.length > 0) {
         const user = userResult.rows[0];
-        isSuperadmin = user.is_superadmin || user.role === 'superadmin';
-        userHasCompany = user.company_id !== null;
+        isSuperadmin = (hasIsSuperadmin && user.is_superadmin) || user.role === 'superadmin';
+        userHasCompany = hasCompanyId && user.company_id !== null;
         
         // Only superadmins or admins without a company can create companies
         if (!isSuperadmin && userHasCompany) {
