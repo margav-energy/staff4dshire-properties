@@ -350,6 +350,42 @@ async function runAdditionalSchemas() {
     } else {
       console.log('✅ company_invitations table already exists.');
     }
+
+    // Check and add password reset fields if they don't exist
+    try {
+      const passwordResetCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name = 'password_reset_token'
+      `);
+      
+      if (passwordResetCheck.rows.length === 0) {
+        console.log('📄 Adding password reset fields to users table...');
+        await pool.query(`
+          ALTER TABLE users 
+          ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS password_reset_token_expires_at TIMESTAMP;
+        `);
+        
+        // Create index for password reset token
+        try {
+          await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_users_password_reset_token 
+            ON users(password_reset_token) 
+            WHERE password_reset_token IS NOT NULL;
+          `);
+        } catch (indexError) {
+          // Index might already exist, ignore
+        }
+        
+        console.log('✅ Password reset fields added successfully!');
+      } else {
+        console.log('✅ Password reset fields already exist.');
+      }
+    } catch (passwordResetError) {
+      console.log(`⚠️  Could not add password reset fields: ${passwordResetError.message.substring(0, 200)}`);
+    }
   } catch (error) {
     console.log(`⚠️  Error running additional schemas: ${error.message.substring(0, 200)}`);
     // Don't throw - these are optional schemas
