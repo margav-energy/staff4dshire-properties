@@ -41,7 +41,9 @@ async function runSchema() {
     const usersTableExists = await checkTableExists('users');
     
     if (usersTableExists) {
-      console.log('✅ Database schema already exists. Skipping migration.');
+      console.log('✅ Database schema already exists. Checking for additional tables...');
+      // Still run additional schemas even if main schema exists
+      await runAdditionalSchemas();
       return true;
     }
 
