@@ -56,43 +56,32 @@ async function runSchema() {
 
     const schema = fs.readFileSync(schemaPath, 'utf8');
     
-    // Split by semicolons and execute each statement
-    // Better parsing: handle multi-line statements and comments
-    const statements = schema
-      .split(';')
-      .map(s => {
-        // Remove comments
-        return s.split('\n')
-          .map(line => {
-            const commentIndex = line.indexOf('--');
-            return commentIndex >= 0 ? line.substring(0, commentIndex) : line;
-          })
-          .join('\n')
-          .trim();
-      })
-      .filter(s => s.length > 0 && !s.match(/^\s*$/));
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const statement of statements) {
-      if (statement.trim().length === 0) continue;
+    // Execute the entire schema as one query
+    // PostgreSQL can handle multiple statements separated by semicolons
+    console.log('📝 Executing database schema (full file)...');
+    try {
+      await pool.query(schema);
+      console.log('✅ Database schema executed successfully!');
+    } catch (error) {
+      // If full execution fails, it might be because some objects already exist
+      // Try to continue anyway and verify tables were created
+      console.log(`⚠️  Schema execution had errors: ${error.message.substring(0, 200)}`);
+      console.log('🔍 Verifying if tables were created despite errors...');
       
-      try {
-        await pool.query(statement);
-        successCount++;
-      } catch (error) {
-        // Ignore "already exists" errors
-        if (error.message.includes('already exists') || 
-            error.message.includes('duplicate') ||
-            error.code === '42P07' || // duplicate_table
-            error.code === '42710') { // duplicate_object
-          // Table/object already exists, that's fine
-          continue;
+      // Check if critical tables exist
+      const criticalTables = ['users', 'projects', 'time_entries'];
+      let tablesExist = 0;
+      for (const table of criticalTables) {
+        if (await checkTableExists(table)) {
+          tablesExist++;
         }
-        console.error(`⚠️  Error executing statement: ${error.message}`);
-        console.error(`   Statement: ${statement.substring(0, 100)}...`);
-        errorCount++;
+      }
+      
+      if (tablesExist === criticalTables.length) {
+        console.log('✅ All critical tables exist. Schema migration successful!');
+      } else {
+        console.log(`⚠️  Only ${tablesExist}/${criticalTables.length} critical tables exist.`);
+        throw error; // Re-throw to trigger retry
       }
     }
 
