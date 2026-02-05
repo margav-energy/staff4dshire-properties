@@ -141,16 +141,23 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
-// Database seeding (runs automatically if SEED_DATABASE=true)
-if (process.env.SEED_DATABASE === 'true') {
-  const { seedDatabase } = require('./scripts/seed_default_data');
-  // Run seeding asynchronously after server starts
-  setTimeout(() => {
-    seedDatabase().catch(err => {
-      console.error('Database seeding failed:', err);
-    });
-  }, 2000); // Wait 2 seconds for database connection to be ready
-}
+// Auto-migration: Run schema if tables don't exist
+const { runSchema } = require('./scripts/auto_migrate');
+setTimeout(() => {
+  runSchema().then(() => {
+    // After schema is ready, run seeding if enabled
+    if (process.env.SEED_DATABASE === 'true') {
+      const { seedDatabase } = require('./scripts/seed_default_data');
+      setTimeout(() => {
+        seedDatabase().catch(err => {
+          console.error('Database seeding failed:', err);
+        });
+      }, 1000); // Wait 1 second after schema
+    }
+  }).catch(err => {
+    console.error('Auto-migration failed:', err);
+  });
+}, 3000); // Wait 3 seconds for database connection to be ready
 
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
