@@ -181,12 +181,56 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const id = uuidv4();
+    // Check which columns exist in companies table
+    const columnsCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'companies'
+    `);
+    const existingColumns = columnsCheck.rows.map(row => row.column_name);
+    
+    // Build INSERT statement based on available columns
+    const insertColumns = ['id', 'name'];
+    const insertValues = [uuidv4(), name];
+    let paramIndex = 3;
+    
+    if (existingColumns.includes('domain')) {
+      insertColumns.push('domain');
+      insertValues.push(domain || null);
+      paramIndex++;
+    }
+    if (existingColumns.includes('address')) {
+      insertColumns.push('address');
+      insertValues.push(address || null);
+      paramIndex++;
+    }
+    if (existingColumns.includes('phone_number')) {
+      insertColumns.push('phone_number');
+      insertValues.push(phone_number || null);
+      paramIndex++;
+    }
+    if (existingColumns.includes('email')) {
+      insertColumns.push('email');
+      insertValues.push(email || null);
+      paramIndex++;
+    }
+    if (existingColumns.includes('subscription_tier')) {
+      insertColumns.push('subscription_tier');
+      insertValues.push(subscription_tier);
+      paramIndex++;
+    }
+    if (existingColumns.includes('max_users')) {
+      insertColumns.push('max_users');
+      insertValues.push(max_users);
+      paramIndex++;
+    }
+    
+    const placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ');
     const result = await pool.query(
-      `INSERT INTO companies (id, name, domain, address, phone_number, email, subscription_tier, max_users)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO companies (${insertColumns.join(', ')})
+       VALUES (${placeholders})
        RETURNING *`,
-      [id, name, domain || null, address || null, phone_number || null, email || null, subscription_tier, max_users]
+      insertValues
     );
 
     // If user is admin (not superadmin) and doesn't have a company, assign them to the new company
