@@ -233,14 +233,27 @@ router.post('/', async (req, res) => {
       insertValues
     );
 
+    const companyId = result.rows[0].id;
+
     // If user is admin (not superadmin) and doesn't have a company, assign them to the new company
     if (userId && !isSuperadmin && !userHasCompany) {
       try {
-        await pool.query(
-          'UPDATE users SET company_id = $1 WHERE id = $2',
-          [id, userId]
-        );
-        console.log(`✅ Assigned user ${userId} to newly created company ${id}`);
+        // Check if company_id column exists in users table
+        const usersColumnCheck = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'users' AND column_name = 'company_id'
+        `);
+        
+        if (usersColumnCheck.rows.length > 0) {
+          await pool.query(
+            'UPDATE users SET company_id = $1 WHERE id = $2',
+            [companyId, userId]
+          );
+          console.log(`✅ Assigned user ${userId} to newly created company ${companyId}`);
+        } else {
+          console.log('⚠️  company_id column does not exist in users table. Skipping assignment.');
+        }
       } catch (assignError) {
         console.error('Failed to assign user to company:', assignError.message);
         // Don't fail the request - company was created successfully
