@@ -2,7 +2,11 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 // Create reusable transporter
-const transporter = nodemailer.createTransport({
+// Configure based on SMTP provider
+const isSendGrid = process.env.SMTP_HOST && process.env.SMTP_HOST.includes('sendgrid');
+const isGmail = !process.env.SMTP_HOST || process.env.SMTP_HOST.includes('gmail');
+
+const transporterConfig = {
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.SMTP_PORT || '587'),
   secure: false, // true for 465, false for other ports
@@ -10,20 +14,29 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASSWORD,
   },
-  // Connection timeout settings
-  connectionTimeout: 10000, // 10 seconds
-  greetingTimeout: 10000, // 10 seconds
-  socketTimeout: 10000, // 10 seconds
+  // Connection timeout settings - longer for SendGrid
+  connectionTimeout: isSendGrid ? 30000 : 10000, // 30 seconds for SendGrid, 10 for others
+  greetingTimeout: isSendGrid ? 30000 : 10000,
+  socketTimeout: isSendGrid ? 30000 : 10000,
   // Retry settings
   pool: true,
   maxConnections: 1,
   maxMessages: 3,
-  // TLS options for better compatibility
-  tls: {
+};
+
+// TLS options - different for SendGrid vs Gmail
+if (isSendGrid) {
+  transporterConfig.tls = {
+    rejectUnauthorized: true, // SendGrid uses valid certificates
+  };
+} else {
+  transporterConfig.tls = {
     rejectUnauthorized: false, // Accept self-signed certificates if needed
     ciphers: 'SSLv3'
-  }
-});
+  };
+}
+
+const transporter = nodemailer.createTransport(transporterConfig);
 
 // Verify connection configuration (non-blocking, only if SMTP is configured)
 if (process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
