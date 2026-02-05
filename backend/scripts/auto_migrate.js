@@ -236,7 +236,7 @@ async function runSchema() {
             console.log(`⚠️  Could not add password reset fields: ${passwordFieldsError.message.substring(0, 200)}`);
           }
         } else {
-          console.log('✅ Multi-tenant columns already exist.');
+          console.log('✅ Multi-tenant columns already exist on users table.');
           
           // Still check and update role constraint to include superadmin
           try {
@@ -252,6 +252,34 @@ async function runSchema() {
             console.log('✅ Updated role constraint to include superadmin.');
           } catch (constraintError) {
             // Constraint might already be correct, ignore
+          }
+          
+          // Check and add company_id to other tables that might be missing it
+          console.log('📄 Checking other tables for company_id columns...');
+          const tablesToCheck = ['projects', 'conversations', 'time_entries', 'documents', 'notifications'];
+          
+          for (const tableName of tablesToCheck) {
+            try {
+              const tableExists = await checkTableExists(tableName);
+              if (tableExists) {
+                const columnCheck = await pool.query(`
+                  SELECT column_name 
+                  FROM information_schema.columns 
+                  WHERE table_name = $1 AND column_name = 'company_id'
+                `, [tableName]);
+                
+                if (columnCheck.rows.length === 0) {
+                  console.log(`📄 Adding company_id to ${tableName} table...`);
+                  await pool.query(`
+                    ALTER TABLE ${tableName} 
+                    ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE;
+                  `);
+                  console.log(`✅ Added company_id to ${tableName} table.`);
+                }
+              }
+            } catch (tableError) {
+              console.log(`⚠️  Could not add company_id to ${tableName}: ${tableError.message.substring(0, 100)}`);
+            }
           }
         }
       } catch (checkError) {

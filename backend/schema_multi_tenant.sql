@@ -61,6 +61,15 @@ ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASC
 ALTER TABLE inductions 
 ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE;
 
+-- Add company_id to conversations table (if exists)
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'conversations') THEN
+        ALTER TABLE conversations 
+        ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
 -- Add company_id to job_completions table (if exists)
 DO $$ 
 BEGIN
