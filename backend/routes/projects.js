@@ -31,17 +31,35 @@ router.get('/', async (req, res) => {
         // Superadmins can see all projects
         if (!user.is_superadmin && user.role !== 'superadmin') {
           // Regular users can only see projects from their company
-          // Only filter if company_id exists (non-null)
-          if (user.company_id) {
-            // Filter by matching company_id
-            query += ' WHERE company_id IS NOT NULL AND company_id = $1';
-            params = [user.company_id];
-            console.log('[PROJECTS API] Filtering by company_id:', user.company_id);
-          } else {
-            // User has no company_id - return empty list
-            query += ' WHERE 1=0'; // Always false condition
-            params = [];
-            console.log('[PROJECTS API] User has no company_id, returning empty list');
+          // Check if company_id column exists first
+          try {
+            const columnCheck = await pool.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'projects' AND column_name = 'company_id'
+            `);
+            const hasCompanyIdColumn = columnCheck.rows.length > 0;
+            
+            if (hasCompanyIdColumn) {
+              // Only filter if company_id exists (non-null)
+              if (user.company_id) {
+                // Filter by matching company_id
+                query += ' WHERE company_id IS NOT NULL AND company_id = $1';
+                params = [user.company_id];
+                console.log('[PROJECTS API] Filtering by company_id:', user.company_id);
+              } else {
+                // User has no company_id - return empty list
+                query += ' WHERE 1=0'; // Always false condition
+                params = [];
+                console.log('[PROJECTS API] User has no company_id, returning empty list');
+              }
+            } else {
+              // company_id column doesn't exist yet - return all projects for this user
+              console.log('[PROJECTS API] company_id column not found, returning all projects');
+            }
+          } catch (checkError) {
+            // If check fails, just return all projects
+            console.log('[PROJECTS API] Error checking company_id column, returning all projects');
           }
         } else {
           console.log('[PROJECTS API] Superadmin detected, returning all projects');
