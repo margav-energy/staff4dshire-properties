@@ -66,31 +66,54 @@ async function checkIfSeeded() {
   }
 }
 
+async function checkColumnExists(tableName, columnName) {
+  try {
+    const result = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = $1 AND column_name = $2
+    `, [tableName, columnName]);
+    return result.rows.length > 0;
+  } catch (error) {
+    return false;
+  }
+}
+
 async function createUser(userData, companyId = null) {
   try {
     const passwordHash = await hashPassword(userData.password);
     const userId = uuidv4();
     
+    // Check which columns exist
+    const hasCompanyId = await checkColumnExists('users', 'company_id');
+    const hasIsSuperadmin = await checkColumnExists('users', 'is_superadmin');
+    
+    // Build query based on available columns
+    let columns = ['id', 'email', 'password_hash', 'first_name', 'last_name', 'role', 'is_active', 'phone_number'];
+    let values = [userId, userData.email.toLowerCase().trim(), passwordHash, userData.firstName, userData.lastName, userData.role, true, null];
+    let placeholders = [];
+    
+    if (hasIsSuperadmin) {
+      columns.push('is_superadmin');
+      values.push(userData.isSuperadmin || false);
+    }
+    
+    if (hasCompanyId && companyId) {
+      columns.push('company_id');
+      values.push(companyId);
+    }
+    
+    // Build placeholders
+    for (let i = 1; i <= values.length; i++) {
+      placeholders.push(`$${i}`);
+    }
+    
     const result = await pool.query(
-      `INSERT INTO users (
-        id, email, password_hash, first_name, last_name, role, 
-        is_superadmin, company_id, is_active, phone_number
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO users (${columns.join(', ')})
+      VALUES (${placeholders.join(', ')})
       ON CONFLICT (email) DO NOTHING
       RETURNING id, email, first_name, last_name, role`,
-      [
-        userId,
-        userData.email.toLowerCase().trim(),
-        passwordHash,
-        userData.firstName,
-        userData.lastName,
-        userData.role,
-        userData.isSuperadmin || false,
-        companyId,
-        true,
-        null,
-      ]
+      values
     );
 
     if (result.rows.length > 0) {

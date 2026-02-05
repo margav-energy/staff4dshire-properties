@@ -138,7 +138,37 @@ async function runSchema() {
     // Verify users table was created
     const usersExists = await checkTableExists('users');
     if (usersExists) {
-      console.log('✅ Users table verified. Schema migration complete!');
+      console.log('✅ Users table verified.');
+      
+      // Check if multi-tenant columns exist, if not run multi-tenant migration
+      try {
+        const columnCheck = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'users' AND column_name = 'company_id'
+        `);
+        
+        if (columnCheck.rows.length === 0) {
+          console.log('📄 Running multi-tenant schema migration...');
+          const multiTenantPath = path.join(__dirname, '../schema_multi_tenant.sql');
+          if (fs.existsSync(multiTenantPath)) {
+            const multiTenantSchema = fs.readFileSync(multiTenantPath, 'utf8');
+            try {
+              await pool.query(multiTenantSchema);
+              console.log('✅ Multi-tenant schema applied successfully!');
+            } catch (mtError) {
+              console.log(`⚠️  Multi-tenant migration had errors: ${mtError.message.substring(0, 200)}`);
+              // Continue anyway - some columns might already exist
+            }
+          }
+        } else {
+          console.log('✅ Multi-tenant columns already exist.');
+        }
+      } catch (checkError) {
+        console.log('⚠️  Could not check for multi-tenant columns:', checkError.message);
+      }
+      
+      console.log('✅ Schema migration complete!');
       return true;
     } else {
       console.log('⚠️  Users table not found after migration. Manual intervention may be required.');
