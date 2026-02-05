@@ -279,6 +279,51 @@ router.put('/:id/assign-company', async (req, res) => {
       return res.status(400).json({ error: 'company_id is required' });
     }
     
+    // Check if company_id column exists
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'company_id'
+    `);
+    
+    if (columnCheck.rows.length === 0) {
+      // Column doesn't exist, try to add it
+      console.log('⚠️  company_id column does not exist. Attempting to add it...');
+      try {
+        // First check if companies table exists
+        const companiesTableCheck = await pool.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'companies'
+          )
+        `);
+        
+        if (companiesTableCheck.rows[0].exists) {
+          // Add company_id column with foreign key
+          await pool.query(`
+            ALTER TABLE users 
+            ADD COLUMN company_id UUID REFERENCES companies(id) ON DELETE CASCADE
+          `);
+          console.log('✅ Added company_id column to users table');
+        } else {
+          // Add company_id column without foreign key (companies table doesn't exist yet)
+          await pool.query(`
+            ALTER TABLE users 
+            ADD COLUMN company_id UUID
+          `);
+          console.log('✅ Added company_id column to users table (without foreign key)');
+        }
+      } catch (addColumnError) {
+        console.error('Failed to add company_id column:', addColumnError.message);
+        return res.status(500).json({ 
+          error: 'company_id column does not exist and could not be created',
+          message: addColumnError.message,
+          hint: 'Please run the migration endpoint: POST /api/admin/migrate'
+        });
+      }
+    }
+    
     // Verify company exists
     const companyResult = await pool.query('SELECT id, name FROM companies WHERE id = $1', [company_id]);
     if (companyResult.rows.length === 0) {
