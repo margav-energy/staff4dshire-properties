@@ -101,9 +101,38 @@ io.on('connection', (socket) => {
 // Make io accessible to routes
 app.set('io', io);
 
+// Root route - API information
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Staff4dshire Properties API',
+    version: '1.0.0',
+    status: 'running',
+    message: 'Welcome to Staff4dshire Properties API',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      users: '/api/users',
+      companies: '/api/companies',
+      projects: '/api/projects',
+      timesheets: '/api/timesheets',
+      chat: '/api/chat',
+      notifications: '/api/notifications',
+      jobCompletions: '/api/job-completions',
+      invoices: '/api/invoices',
+      incidents: '/api/incidents',
+    },
+    documentation: 'See /api/health for server status',
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Staff4dshire API is running' });
+  res.json({ 
+    status: 'ok', 
+    message: 'Staff4dshire API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+  });
 });
 
 // Error handling middleware
