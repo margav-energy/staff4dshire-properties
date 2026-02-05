@@ -4,7 +4,7 @@ services:
     name: staff4dshire-backend
     env: node
     region: oregon  # Change to your preferred region
-    plan: starter  # Free tier - upgrade as needed
+    plan: free  # Free tier - upgrade to starter ($7/month) or standard ($20/month) as needed
     buildCommand: cd backend && npm install
     startCommand: cd backend && npm start
     envVars:
@@ -57,4 +57,5 @@ databases:
   - name: staff4dshire-db
     databaseName: staff4dshire
     user: staff4dshire
-    plan: starter  # Free tier - upgrade as needed
+    # Note: Free tier databases don't require a plan specification
+    # For paid plans, use: plan: standard, plan: pro, etc.
