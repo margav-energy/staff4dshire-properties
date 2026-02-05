@@ -132,6 +132,15 @@ router.post('/', async (req, res) => {
       [id, name, domain || null, address || null, phone_number || null, email || null, subscription_tier, max_users]
     );
 
+    // If user is admin (not superadmin) and doesn't have a company, assign them to the new company
+    if (userId && !isSuperadmin && !userHasCompany) {
+      await pool.query(
+        'UPDATE users SET company_id = $1 WHERE id = $2',
+        [id, userId]
+      );
+      console.log(`✅ Assigned user ${userId} to newly created company ${id}`);
+    }
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creating company:', error);
