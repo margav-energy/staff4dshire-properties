@@ -15,13 +15,18 @@ const transporterConfig = {
     pass: process.env.SMTP_PASSWORD,
   },
   // Connection timeout settings - longer for SendGrid
-  connectionTimeout: isSendGrid ? 30000 : 10000, // 30 seconds for SendGrid, 10 for others
-  greetingTimeout: isSendGrid ? 30000 : 10000,
-  socketTimeout: isSendGrid ? 30000 : 10000,
+  connectionTimeout: isSendGrid ? 60000 : 10000, // 60 seconds for SendGrid, 10 for others
+  greetingTimeout: isSendGrid ? 60000 : 10000,
+  socketTimeout: isSendGrid ? 60000 : 10000,
   // Retry settings
-  pool: true,
+  pool: false, // Disable pooling for SendGrid to avoid connection issues
   maxConnections: 1,
-  maxMessages: 3,
+  maxMessages: 1,
+  // Additional options for SendGrid
+  ...(isSendGrid && {
+    requireTLS: true,
+    debug: false,
+  }),
 };
 
 // TLS options - different for SendGrid vs Gmail
