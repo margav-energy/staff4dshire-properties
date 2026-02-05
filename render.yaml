@@ -46,8 +46,9 @@ services:
       # - key: APP_BASE_URL
       #   value: https://staff4dshire-admin.onrender.com  # Update with your actual URL
       # CORS Configuration - Add your Flutter web app URLs (comma-separated)
-      # - key: ALLOWED_ORIGINS
-      #   value: https://staff4dshire-admin.onrender.com,https://staff4dshire-staff.onrender.com
+      # IMPORTANT: Update these URLs with your actual Render frontend URLs!
+      - key: ALLOWED_ORIGINS
+        value: https://staff4dshire-admin.onrender.com,https://staff4dshire-staff.onrender.com
       # Database Seeding - Set to true to automatically create default users
       - key: SEED_DATABASE
         value: "true"
