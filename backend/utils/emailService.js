@@ -40,10 +40,16 @@ const transporter = nodemailer.createTransport(transporterConfig);
 
 // Verify connection configuration (non-blocking, only if SMTP is configured)
 if (process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+  console.log(`📧 Email service configured: ${process.env.SMTP_HOST || 'smtp.gmail.com'}`);
+  console.log(`   User: ${process.env.SMTP_USER}`);
+  console.log(`   Port: ${process.env.SMTP_PORT || '587'}`);
+  
   transporter.verify(function (error, success) {
     if (error) {
       console.log('⚠️  Email service configuration error (emails will not be sent):', error.message);
       console.log('   This is OK if you plan to share invitation codes manually.');
+      console.log(`   Host: ${process.env.SMTP_HOST || 'smtp.gmail.com'}`);
+      console.log(`   Error code: ${error.code || 'N/A'}`);
     } else {
       console.log('✅ Email service is ready to send messages');
     }
