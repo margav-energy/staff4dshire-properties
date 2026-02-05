@@ -94,19 +94,30 @@ router.post('/', async (req, res) => {
 
     // Create user account (must_change_password = true for system-generated passwords)
     const userId = uuidv4();
-    await client.query(
-      `INSERT INTO users 
-       (id, email, password_hash, first_name, last_name, role, phone_number, company_id, is_active, must_change_password)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        userId,
-        normalizedEmail,
-        passwordHash,
-        first_name.trim(),
-        last_name.trim(),
-        'admin',
-        phone_number?.trim() || null,
-        companyId,
+    
+    // Check if company_id column exists
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'company_id'
+    `);
+    const hasCompanyId = columnCheck.rows.length > 0;
+    
+    // Build insert query based on available columns
+    if (hasCompanyId) {
+      await client.query(
+        `INSERT INTO users 
+         (id, email, password_hash, first_name, last_name, role, phone_number, company_id, is_active, must_change_password)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          userId,
+          normalizedEmail,
+          passwordHash,
+          first_name.trim(),
+          last_name.trim(),
+          'admin',
+          phone_number?.trim() || null,
+          companyId,
         true,
         true, // Force password change on first login
       ]
