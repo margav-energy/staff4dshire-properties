@@ -135,6 +135,33 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Manual migration endpoint (for troubleshooting)
+app.post('/api/admin/migrate', async (req, res) => {
+  try {
+    const { runSchema } = require('./scripts/auto_migrate');
+    console.log('🔄 Manual migration triggered via API');
+    const success = await runSchema();
+    
+    if (success) {
+      res.json({ 
+        status: 'success', 
+        message: 'Database schema migration completed successfully' 
+      });
+    } else {
+      res.status(500).json({ 
+        status: 'error', 
+        message: 'Migration completed with errors. Check server logs.' 
+      });
+    }
+  } catch (error) {
+    console.error('Migration endpoint error:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: error.message 
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
@@ -143,21 +170,44 @@ app.use((err, req, res, next) => {
 
 // Auto-migration: Run schema if tables don't exist
 const { runSchema } = require('./scripts/auto_migrate');
-setTimeout(() => {
-  runSchema().then(() => {
-    // After schema is ready, run seeding if enabled
-    if (process.env.SEED_DATABASE === 'true') {
-      const { seedDatabase } = require('./scripts/seed_default_data');
-      setTimeout(() => {
-        seedDatabase().catch(err => {
-          console.error('Database seeding failed:', err);
-        });
-      }, 1000); // Wait 1 second after schema
+
+// Retry migration with exponential backoff
+async function runMigrationWithRetry(maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    const delay = Math.pow(2, i) * 2000; // 2s, 4s, 8s
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    console.log(`🔄 Attempting database migration (attempt ${i + 1}/${maxRetries})...`);
+    const success = await runSchema();
+    
+    if (success) {
+      // After schema is ready, run seeding if enabled
+      if (process.env.SEED_DATABASE === 'true') {
+        const { seedDatabase } = require('./scripts/seed_default_data');
+        setTimeout(() => {
+          seedDatabase().catch(err => {
+            console.error('Database seeding failed:', err);
+          });
+        }, 1000); // Wait 1 second after schema
+      }
+      return;
     }
-  }).catch(err => {
-    console.error('Auto-migration failed:', err);
+    
+    if (i < maxRetries - 1) {
+      console.log(`⏳ Migration failed, retrying in ${delay/1000} seconds...`);
+    }
+  }
+  
+  console.error('❌ Migration failed after all retries. Manual intervention required.');
+  console.log('💡 To fix: Run the schema manually using Render database connection tools.');
+}
+
+// Start migration after server starts
+setTimeout(() => {
+  runMigrationWithRetry().catch(err => {
+    console.error('Migration retry failed:', err);
   });
-}, 3000); // Wait 3 seconds for database connection to be ready
+}, 5000); // Wait 5 seconds for database connection to be ready
 
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
