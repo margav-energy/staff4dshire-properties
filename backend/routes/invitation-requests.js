@@ -159,8 +159,9 @@ router.post('/', async (req, res) => {
 
     // Send credentials email (non-blocking)
     const baseUrl = req.body.base_url || process.env.APP_BASE_URL || 'http://localhost:3000';
+    const emailConfigured = process.env.SMTP_USER && process.env.SMTP_PASSWORD;
     
-    if (process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+    if (emailConfigured) {
       sendCredentialsEmail(
         normalizedEmail,
         plainPassword,
@@ -172,11 +173,26 @@ router.post('/', async (req, res) => {
       });
     }
 
-    res.status(201).json({
+    // Prepare response
+    const response = {
       success: true,
-      message: 'Your account has been created successfully! Check your email for your login credentials.',
+      message: emailConfigured 
+        ? 'Your account has been created successfully! Check your email for your login credentials.'
+        : 'Your account has been created successfully! Please save your credentials below.',
       request: request,
-    });
+    };
+
+    // If email is not configured, return credentials in response
+    if (!emailConfigured) {
+      response.credentials = {
+        email: normalizedEmail,
+        password: plainPassword,
+        warning: 'Email service is not configured. Please save these credentials now - they will not be shown again!'
+      };
+      console.log(`⚠️  Email not configured. Credentials returned in API response for ${normalizedEmail}`);
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error creating account:', error);
