@@ -6,9 +6,16 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+// CORS configuration - update with your production URLs
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:8080', 'http://localhost:3000']; // Default for development
+
 const io = new Server(server, {
   cors: {
-    origin: "*", // Configure appropriately for production
+    origin: process.env.NODE_ENV === 'production' 
+      ? allowedOrigins 
+      : "*", // Allow all in development
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -16,8 +23,17 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
+// CORS configuration
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? allowedOrigins
+    : "*", // Allow all in development
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 // Increase body size limit to handle base64 images (50MB limit)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -96,9 +112,24 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
+// Database seeding (runs automatically if SEED_DATABASE=true)
+if (process.env.SEED_DATABASE === 'true') {
+  const { seedDatabase } = require('./scripts/seed_default_data');
+  // Run seeding asynchronously after server starts
+  setTimeout(() => {
+    seedDatabase().catch(err => {
+      console.error('Database seeding failed:', err);
+    });
+  }, 2000); // Wait 2 seconds for database connection to be ready
+}
+
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
   console.log(`Socket.io server ready for connections`);
+  
+  if (process.env.SEED_DATABASE === 'true') {
+    console.log(`Database seeding enabled - will run automatically`);
+  }
 });
 

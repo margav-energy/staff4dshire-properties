@@ -1,0 +1,60 @@
+services:
+  # Backend API Service
+  - type: web
+    name: staff4dshire-backend
+    env: node
+    region: oregon  # Change to your preferred region
+    plan: starter  # Free tier - upgrade as needed
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000  # Render uses port 10000 by default
+      - key: DB_HOST
+        fromDatabase:
+          name: staff4dshire-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: staff4dshire-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: staff4dshire-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: staff4dshire-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: staff4dshire-db
+          property: password
+      # Optional: Email configuration (uncomment and set if needed)
+      # - key: SMTP_HOST
+      #   value: smtp.gmail.com
+      # - key: SMTP_PORT
+      #   value: 587
+      # - key: SMTP_USER
+      #   value: your-email@gmail.com
+      # - key: SMTP_PASSWORD
+      #   value: your-app-password
+      # - key: SMTP_FROM
+      #   value: noreply@staff4dshire.com
+      # - key: APP_BASE_URL
+      #   value: https://staff4dshire-admin.onrender.com  # Update with your actual URL
+      # CORS Configuration - Add your Flutter web app URLs (comma-separated)
+      # - key: ALLOWED_ORIGINS
+      #   value: https://staff4dshire-admin.onrender.com,https://staff4dshire-staff.onrender.com
+      # Database Seeding - Set to true to automatically create default users
+      - key: SEED_DATABASE
+        value: "true"
+
+databases:
+  # PostgreSQL Database
+  - name: staff4dshire-db
+    databaseName: staff4dshire
+    user: staff4dshire
+    plan: starter  # Free tier - upgrade as needed
