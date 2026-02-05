@@ -86,7 +86,6 @@ router.post('/', async (req, res) => {
     // Send invitation email (non-blocking - don't fail if email fails)
     // Use base_url from request, or role-specific URL, or APP_BASE_URL, or default to localhost for dev
     // Admin invitations go to admin app, supervisor/staff go to staff app
-    const role = req.body.role || 'admin';
     const defaultUrl = role === 'admin' 
       ? (process.env.ADMIN_APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000')
       : (process.env.STAFF_APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000');
