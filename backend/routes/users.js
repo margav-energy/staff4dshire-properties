@@ -125,8 +125,27 @@ router.get('/by-email/:email', async (req, res) => {
     const { email } = req.params;
     const normalizedEmail = email.toLowerCase().trim();
     
+    // Check which columns exist
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name IN ('company_id', 'is_superadmin')
+    `);
+    const existingColumns = columnCheck.rows.map(row => row.column_name);
+    const hasCompanyId = existingColumns.includes('company_id');
+    const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+    
+    // Build select query based on available columns
+    let selectColumns = ['id', 'email', 'first_name', 'last_name', 'role', 'is_active'];
+    if (hasCompanyId) {
+      selectColumns.push('company_id');
+    }
+    if (hasIsSuperadmin) {
+      selectColumns.push('is_superadmin');
+    }
+    
     const result = await pool.query(
-      'SELECT id, email, first_name, last_name, role, company_id, is_superadmin, is_active FROM users WHERE LOWER(TRIM(email)) = $1',
+      `SELECT ${selectColumns.join(', ')} FROM users WHERE LOWER(TRIM(email)) = $1`,
       [normalizedEmail]
     );
     
@@ -134,7 +153,16 @@ router.get('/by-email/:email', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    res.json(result.rows[0]);
+    // Add null values for missing columns
+    const user = result.rows[0];
+    if (!hasCompanyId) {
+      user.company_id = null;
+    }
+    if (!hasIsSuperadmin) {
+      user.is_superadmin = false;
+    }
+    
+    res.json(user);
   } catch (error) {
     console.error('Error fetching user by email:', error);
     res.status(500).json({ error: 'Failed to fetch user', message: error.message });
