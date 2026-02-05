@@ -3,7 +3,7 @@ services:
   - type: web
     name: staff4dshire-backend
     env: node
-    region: oregon  # Change to your preferred region
+    region: frankfurt  # Matches database region
     plan: free  # Free tier - upgrade to starter ($7/month) or standard ($20/month) as needed
     buildCommand: cd backend && npm install
     startCommand: cd backend && npm start
