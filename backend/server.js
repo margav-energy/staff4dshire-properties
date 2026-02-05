@@ -162,6 +162,95 @@ app.post('/api/admin/migrate', async (req, res) => {
   }
 });
 
+// Create superadmin endpoint (for initial setup)
+app.post('/api/admin/create-superadmin', async (req, res) => {
+  try {
+    const pool = require('./db');
+    const bcrypt = require('bcrypt');
+    const { v4: uuidv4 } = require('uuid');
+    
+    const { email, password, first_name = 'Super', last_name = 'Admin' } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ 
+        error: 'Email and password are required',
+        example: {
+          email: 'superadmin@staff4dshire.com',
+          password: 'Admin123!',
+          first_name: 'Super',
+          last_name: 'Admin'
+        }
+      });
+    }
+    
+    // Check if user already exists
+    const existing = await pool.query('SELECT id, email FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ 
+        error: 'User with this email already exists',
+        userId: existing.rows[0].id
+      });
+    }
+    
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+    const userId = uuidv4();
+    
+    // Check which columns exist
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name IN ('company_id', 'is_superadmin')
+    `);
+    const existingColumns = columnCheck.rows.map(row => row.column_name);
+    const hasCompanyId = existingColumns.includes('company_id');
+    const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+    
+    // Build insert query
+    const columns = ['id', 'email', 'password_hash', 'first_name', 'last_name', 'role', 'is_active'];
+    const values = [userId, email.toLowerCase().trim(), passwordHash, first_name, last_name, 'superadmin', true];
+    
+    if (hasIsSuperadmin) {
+      columns.push('is_superadmin');
+      values.push(true);
+    }
+    
+    if (hasCompanyId) {
+      columns.push('company_id');
+      values.push(null); // Superadmins don't need company_id
+    }
+    
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+    
+    await pool.query(
+      `INSERT INTO users (${columns.join(', ')})
+       VALUES (${placeholders})
+       RETURNING id, email, first_name, last_name, role`,
+      values
+    );
+    
+    console.log(`✅ Superadmin created: ${email}`);
+    
+    res.json({
+      success: true,
+      message: 'Superadmin created successfully',
+      user: {
+        email: email.toLowerCase().trim(),
+        first_name,
+        last_name,
+        role: 'superadmin'
+      },
+      note: 'You can now log in with these credentials'
+    });
+  } catch (error) {
+    console.error('Create superadmin error:', error);
+    res.status(500).json({ 
+      error: 'Failed to create superadmin',
+      message: error.message 
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
