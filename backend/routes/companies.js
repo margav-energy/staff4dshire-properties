@@ -124,6 +124,44 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Company name is required' });
     }
 
+    // Check if companies table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'companies'
+      )
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      console.error('Companies table does not exist. Running migration...');
+      // Try to create companies table
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS companies (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name VARCHAR(255) NOT NULL,
+            domain VARCHAR(255),
+            address TEXT,
+            phone_number VARCHAR(20),
+            email VARCHAR(255),
+            is_active BOOLEAN DEFAULT TRUE,
+            subscription_tier VARCHAR(50) DEFAULT 'basic',
+            max_users INTEGER DEFAULT 50,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        console.log('✅ Companies table created');
+      } catch (createError) {
+        console.error('Failed to create companies table:', createError.message);
+        return res.status(500).json({ 
+          error: 'Companies table does not exist. Please run migration first.',
+          details: createError.message 
+        });
+      }
+    }
+
     const id = uuidv4();
     const result = await pool.query(
       `INSERT INTO companies (id, name, domain, address, phone_number, email, subscription_tier, max_users)
@@ -134,17 +172,28 @@ router.post('/', async (req, res) => {
 
     // If user is admin (not superadmin) and doesn't have a company, assign them to the new company
     if (userId && !isSuperadmin && !userHasCompany) {
-      await pool.query(
-        'UPDATE users SET company_id = $1 WHERE id = $2',
-        [id, userId]
-      );
-      console.log(`✅ Assigned user ${userId} to newly created company ${id}`);
+      try {
+        await pool.query(
+          'UPDATE users SET company_id = $1 WHERE id = $2',
+          [id, userId]
+        );
+        console.log(`✅ Assigned user ${userId} to newly created company ${id}`);
+      } catch (assignError) {
+        console.error('Failed to assign user to company:', assignError.message);
+        // Don't fail the request - company was created successfully
+      }
     }
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creating company:', error);
-    res.status(500).json({ error: 'Failed to create company' });
+    console.error('Error details:', error.message);
+    console.error('Error code:', error.code);
+    res.status(500).json({ 
+      error: 'Failed to create company',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
