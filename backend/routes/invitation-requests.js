@@ -95,52 +95,44 @@ router.post('/', async (req, res) => {
     // Create user account (must_change_password = true for system-generated passwords)
     const userId = uuidv4();
     
-    // Check if company_id column exists
+    // Check which columns exist
     const columnCheck = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
-      WHERE table_name = 'users' AND column_name = 'company_id'
+      WHERE table_name = 'users' AND column_name IN ('company_id', 'must_change_password')
     `);
-    const hasCompanyId = columnCheck.rows.length > 0;
+    const existingColumns = columnCheck.rows.map(row => row.column_name);
+    const hasCompanyId = existingColumns.includes('company_id');
+    const hasMustChangePassword = existingColumns.includes('must_change_password');
     
     // Build insert query based on available columns
+    const columns = ['id', 'email', 'password_hash', 'first_name', 'last_name', 'role', 'phone_number'];
+    const values = [userId, normalizedEmail, passwordHash, first_name.trim(), last_name.trim(), 'admin', phone_number?.trim() || null];
+    let placeholderIndex = values.length;
+    
     if (hasCompanyId) {
-      await client.query(
-        `INSERT INTO users 
-         (id, email, password_hash, first_name, last_name, role, phone_number, company_id, is_active, must_change_password)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          userId,
-          normalizedEmail,
-          passwordHash,
-          first_name.trim(),
-          last_name.trim(),
-          'admin',
-          phone_number?.trim() || null,
-          companyId,
-          true,
-          true, // Force password change on first login
-        ]
-      );
-    } else {
-      // Fallback if company_id column doesn't exist
-      await client.query(
-        `INSERT INTO users 
-         (id, email, password_hash, first_name, last_name, role, phone_number, is_active, must_change_password)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          userId,
-          normalizedEmail,
-          passwordHash,
-          first_name.trim(),
-          last_name.trim(),
-          'admin',
-          phone_number?.trim() || null,
-          true,
-          true, // Force password change on first login
-        ]
-      );
+      columns.push('company_id');
+      values.push(companyId);
+      placeholderIndex++;
     }
+    
+    columns.push('is_active');
+    values.push(true);
+    placeholderIndex++;
+    
+    if (hasMustChangePassword) {
+      columns.push('must_change_password');
+      values.push(true); // Force password change on first login
+      placeholderIndex++;
+    }
+    
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+    
+    await client.query(
+      `INSERT INTO users (${columns.join(', ')})
+       VALUES (${placeholders})`,
+      values
+    );
 
     // Create invitation request record (marked as approved)
     const requestId = uuidv4();

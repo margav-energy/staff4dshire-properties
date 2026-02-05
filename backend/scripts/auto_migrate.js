@@ -211,6 +211,28 @@ async function runSchema() {
               console.log(`⚠️  Manual column addition failed: ${manualError.message}`);
             }
           }
+          
+          // Also add password reset fields if they don't exist
+          try {
+            const passwordFieldsCheck = await pool.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'users' AND column_name = 'must_change_password'
+            `);
+            
+            if (passwordFieldsCheck.rows.length === 0) {
+              console.log('📄 Adding password reset fields...');
+              await pool.query(`
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS password_reset_token_expires_at TIMESTAMP;
+              `);
+              console.log('✅ Password reset fields added.');
+            }
+          } catch (passwordFieldsError) {
+            console.log(`⚠️  Could not add password reset fields: ${passwordFieldsError.message.substring(0, 200)}`);
+          }
         } else {
           console.log('✅ Multi-tenant columns already exist.');
           
