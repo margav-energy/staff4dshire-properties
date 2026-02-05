@@ -158,7 +158,8 @@ router.post('/', async (req, res) => {
     await client.query('COMMIT');
 
     // Send credentials email (non-blocking)
-    const baseUrl = req.body.base_url || process.env.APP_BASE_URL || 'http://localhost:3000';
+    // Use admin app URL for admin account creation (invitation-requests creates admin accounts)
+    const baseUrl = req.body.base_url || process.env.ADMIN_APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
     const emailConfigured = process.env.SMTP_USER && process.env.SMTP_PASSWORD;
     
     if (emailConfigured) {

@@ -84,8 +84,13 @@ router.post('/', async (req, res) => {
     const invitation = result.rows[0];
 
     // Send invitation email (non-blocking - don't fail if email fails)
-    // Use base_url from request, or APP_BASE_URL from env, or default to localhost for dev
-    const baseUrl = req.body.base_url || process.env.APP_BASE_URL || 'http://localhost:3000';
+    // Use base_url from request, or role-specific URL, or APP_BASE_URL, or default to localhost for dev
+    // Admin invitations go to admin app, supervisor/staff go to staff app
+    const role = req.body.role || 'admin';
+    const defaultUrl = role === 'admin' 
+      ? (process.env.ADMIN_APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000')
+      : (process.env.STAFF_APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000');
+    const baseUrl = req.body.base_url || defaultUrl;
     
     // Only send email if SMTP is configured
     if (process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
@@ -207,8 +212,8 @@ router.put('/:id/use', async (req, res) => {
 router.post('/:id/resend', async (req, res) => {
   try {
     const { id } = req.params;
-    const baseUrl = req.body.base_url || process.env.APP_BASE_URL || 'http://localhost:3000';
     
+    // Get invitation to determine role
     const invitationResult = await pool.query(
       `SELECT ci.*, c.name as company_name
        FROM company_invitations ci
@@ -232,6 +237,13 @@ router.post('/:id/resend', async (req, res) => {
     if (new Date(invitation.expires_at) < new Date()) {
       return res.status(400).json({ error: 'Cannot resend expired invitation' });
     }
+
+    // Determine baseUrl based on invitation role
+    const invitationRole = invitation.role || 'admin';
+    const defaultUrl = invitationRole === 'admin'
+      ? (process.env.ADMIN_APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000')
+      : (process.env.STAFF_APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000');
+    const baseUrl = req.body.base_url || defaultUrl;
 
     // Send invitation email
     await sendInvitationEmail(
