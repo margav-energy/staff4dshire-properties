@@ -33,7 +33,12 @@ const transporterConfig = {
 if (isSendGrid) {
   transporterConfig.tls = {
     rejectUnauthorized: true, // SendGrid uses valid certificates
+    minVersion: 'TLSv1.2',
   };
+  // Try alternative port if main port fails
+  if (process.env.SMTP_PORT === '587') {
+    console.log('💡 SendGrid: If port 587 times out, try port 2525 in SMTP_PORT');
+  }
 } else {
   transporterConfig.tls = {
     rejectUnauthorized: false, // Accept self-signed certificates if needed
