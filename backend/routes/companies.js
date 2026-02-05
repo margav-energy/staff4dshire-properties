@@ -82,19 +82,31 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST create new company (only superadmins)
+// POST create new company (superadmins or admins without company)
 router.post('/', async (req, res) => {
   try {
     const userId = req.query.userId || req.body.created_by_user_id;
+    let isSuperadmin = false;
+    let userHasCompany = false;
     
     if (userId) {
       const userResult = await pool.query(
-        'SELECT is_superadmin, role FROM users WHERE id = $1',
+        'SELECT is_superadmin, role, company_id FROM users WHERE id = $1',
         [userId]
       );
       
-      if (userResult.rows.length === 0 || (!userResult.rows[0].is_superadmin && userResult.rows[0].role !== 'superadmin')) {
-        return res.status(403).json({ error: 'Only superadmins can create companies' });
+      if (userResult.rows.length > 0) {
+        const user = userResult.rows[0];
+        isSuperadmin = user.is_superadmin || user.role === 'superadmin';
+        userHasCompany = user.company_id !== null;
+        
+        // Only superadmins or admins without a company can create companies
+        if (!isSuperadmin && userHasCompany) {
+          return res.status(403).json({ 
+            error: 'Only superadmins or admins without a company can create companies',
+            hint: 'If you are an admin, you can only create a company if you are not already assigned to one'
+          });
+        }
       }
     }
     
