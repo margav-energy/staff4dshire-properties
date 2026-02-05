@@ -152,6 +152,35 @@ async function runSchema() {
         
         if (columnCheck.rows.length === 0) {
           console.log('📄 Running multi-tenant schema migration...');
+          
+          // First, ensure companies table exists
+          const companiesExists = await checkTableExists('companies');
+          if (!companiesExists) {
+            console.log('📄 Creating companies table...');
+            try {
+              await pool.query(`
+                CREATE TABLE IF NOT EXISTS companies (
+                  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                  name VARCHAR(255) NOT NULL,
+                  domain VARCHAR(255),
+                  address TEXT,
+                  phone_number VARCHAR(20),
+                  email VARCHAR(255),
+                  is_active BOOLEAN DEFAULT TRUE,
+                  subscription_tier VARCHAR(50) DEFAULT 'basic',
+                  max_users INTEGER DEFAULT 50,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log('✅ Companies table created.');
+            } catch (createError) {
+              console.log(`⚠️  Failed to create companies table: ${createError.message.substring(0, 200)}`);
+            }
+          } else {
+            console.log('✅ Companies table already exists.');
+          }
+          
           const multiTenantPath = path.join(__dirname, '../schema_multi_tenant.sql');
           if (fs.existsSync(multiTenantPath)) {
             const multiTenantSchema = fs.readFileSync(multiTenantPath, 'utf8');
