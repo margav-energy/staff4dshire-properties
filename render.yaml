@@ -53,9 +53,9 @@ services:
         value: "true"
 
 databases:
-  # PostgreSQL Database
+  # PostgreSQL Database (Free tier - no plan specification needed)
   - name: staff4dshire-db
     databaseName: staff4dshire
     user: staff4dshire
-    # Note: Free tier databases don't require a plan specification
-    # For paid plans, use: plan: standard, plan: pro, etc.
+    # Free tier databases don't require a plan field
+    # For paid plans, add: plan: standard (or plan: pro, etc.)
