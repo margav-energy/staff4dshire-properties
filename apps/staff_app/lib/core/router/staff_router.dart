@@ -45,6 +45,7 @@ import '../../features/auth/screens/invitation_register_screen.dart';
 class StaffRouter {
   static GoRouter createRouter(AuthProvider? authProvider) {
     return GoRouter(
+      useHash: true, // Use hash-based routing for static hosting compatibility
       refreshListenable: authProvider,
       redirect: (BuildContext context, GoRouterState state) {
         // Get the current path and URI details
