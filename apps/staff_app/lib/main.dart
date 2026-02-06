@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
 // Shared package
 import 'package:staff4dshire_shared/shared.dart';
@@ -12,8 +11,8 @@ import 'core/router/staff_router.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Use hash-based routing for static hosting compatibility
-  usePathUrlStrategy();
+  // Hash-based routing is default for Flutter web (works on static hosting)
+  // No need to configure anything - GoRouter will use hash URLs automatically
   
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([
