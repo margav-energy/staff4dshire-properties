@@ -53,6 +53,20 @@ router.get('/conversations', async (req, res) => {
       return res.status(400).json({ error: 'userId query parameter is required' });
     }
 
+    // Check if conversations table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'conversations'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      console.log('⚠️  conversations table does not exist yet. Returning empty array.');
+      return res.json([]);
+    }
+
     // Get user's company_id for filtering
     const userResult = await pool.query(
       'SELECT company_id FROM users WHERE id = $1',

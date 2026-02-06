@@ -408,6 +408,34 @@ async function runAdditionalSchemas() {
       console.log('✅ company_invitations table already exists.');
     }
 
+    // Check and run conversations schema
+    const conversationsExists = await checkTableExists('conversations');
+    if (!conversationsExists) {
+      console.log('📄 Running conversations schema...');
+      const chatTablesPath = path.join(__dirname, '../migrations/add_chat_tables_v2.sql');
+      if (fs.existsSync(chatTablesPath)) {
+        const schema = fs.readFileSync(chatTablesPath, 'utf8');
+        try {
+          await pool.query(schema);
+          console.log('✅ conversations, conversation_participants, and messages tables created successfully!');
+        } catch (error) {
+          // If uuid_generate_v4() fails, try with gen_random_uuid()
+          if (error.message.includes('uuid_generate_v4') || error.message.includes('function uuid_generate_v4')) {
+            console.log('⚠️  uuid_generate_v4() not available, using gen_random_uuid() instead...');
+            const fixedSchema = schema.replace(/uuid_generate_v4\(\)/g, 'gen_random_uuid()');
+            await pool.query(fixedSchema);
+            console.log('✅ conversations tables created with gen_random_uuid()!');
+          } else {
+            console.log(`⚠️  Could not create conversations tables: ${error.message.substring(0, 200)}`);
+          }
+        }
+      } else {
+        console.log('⚠️  migrations/add_chat_tables_v2.sql not found.');
+      }
+    } else {
+      console.log('✅ conversations table already exists.');
+    }
+
     // Check and run job_completions and invoices schema
     const jobCompletionsExists = await checkTableExists('job_completions');
     if (!jobCompletionsExists) {
