@@ -46,6 +46,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         // Initialize ChatProvider to show badges
         final chatProvider = Provider.of<ChatProvider>(context, listen: false);
         chatProvider.initialize(userId);
+        
+        // Load job completions for pending approvals
+        final jobCompletionProvider = Provider.of<JobCompletionProvider>(context, listen: false);
+        jobCompletionProvider.loadCompletions();
+        
+        // Load invoices
+        final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+        invoiceProvider.loadInvoices();
       }
       documentProvider.loadDocuments();
       // Timesheet data is already loaded
