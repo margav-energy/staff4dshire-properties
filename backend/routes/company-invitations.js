@@ -16,6 +16,59 @@ function generateInvitationToken() {
 // POST create invitation for a company
 router.post('/', async (req, res) => {
   try {
+    // Check if company_invitations table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'company_invitations'
+      )
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      console.error('company_invitations table does not exist. Running migration...');
+      // Try to create table
+      try {
+        const schemaPath = require('path').join(__dirname, '../schema_company_invitations.sql');
+        const fs = require('fs');
+        if (fs.existsSync(schemaPath)) {
+          const schema = fs.readFileSync(schemaPath, 'utf8');
+          // Replace uuid_generate_v4() with gen_random_uuid() for compatibility
+          const schemaFixed = schema.replace(/uuid_generate_v4\(\)/g, 'gen_random_uuid()');
+          await pool.query(schemaFixed);
+          console.log('✅ company_invitations table created');
+        } else {
+          // Create table manually
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS company_invitations (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+              email VARCHAR(255) NOT NULL,
+              invitation_token VARCHAR(255) UNIQUE NOT NULL,
+              role VARCHAR(50) NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'supervisor', 'staff')),
+              invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
+              expires_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '7 days'),
+              used_at TIMESTAMP NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+          await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_company_invitations_token ON company_invitations(invitation_token);
+            CREATE INDEX IF NOT EXISTS idx_company_invitations_email ON company_invitations(email);
+            CREATE INDEX IF NOT EXISTS idx_company_invitations_company_id ON company_invitations(company_id);
+          `);
+          console.log('✅ company_invitations table created manually');
+        }
+      } catch (createError) {
+        console.error('Failed to create company_invitations table:', createError.message);
+        return res.status(500).json({ 
+          error: 'company_invitations table does not exist. Please run migration first.',
+          details: createError.message 
+        });
+      }
+    }
+
     const {
       company_id,
       email,
@@ -26,6 +79,15 @@ router.post('/', async (req, res) => {
 
     if (!company_id || !email) {
       return res.status(400).json({ error: 'Company ID and email are required' });
+    }
+
+    // Validate role
+    const validRoles = ['admin', 'supervisor', 'staff'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ 
+        error: `Invalid role. Must be one of: ${validRoles.join(', ')}`,
+        received: role 
+      });
     }
 
     // Check if company exists
