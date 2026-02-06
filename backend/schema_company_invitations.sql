@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS company_invitations (
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL,
     invitation_token VARCHAR(255) UNIQUE NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'supervisor')),
+    role VARCHAR(50) NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'supervisor', 'staff')),
     invited_by UUID REFERENCES users(id) ON DELETE SET NULL, -- Superadmin who created the invitation
     expires_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '7 days'),
     used_at TIMESTAMP NULL, -- When the invitation was used to complete registration

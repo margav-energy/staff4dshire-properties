@@ -60,6 +60,23 @@ router.post('/', async (req, res) => {
           `);
           console.log('✅ company_invitations table created manually');
         }
+      }
+      
+      // Update existing constraint to include 'staff' role if table exists
+      try {
+        await pool.query(`
+          ALTER TABLE company_invitations 
+          DROP CONSTRAINT IF EXISTS company_invitations_role_check;
+        `);
+        await pool.query(`
+          ALTER TABLE company_invitations 
+          ADD CONSTRAINT company_invitations_role_check 
+          CHECK (role IN ('admin', 'supervisor', 'staff'));
+        `);
+        console.log('✅ Updated company_invitations role constraint to include staff');
+      } catch (constraintError) {
+        console.log('⚠️  Could not update role constraint (may not exist yet):', constraintError.message);
+      }
       } catch (createError) {
         console.error('Failed to create company_invitations table:', createError.message);
         return res.status(500).json({ 
