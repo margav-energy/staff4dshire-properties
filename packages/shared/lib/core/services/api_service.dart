@@ -45,8 +45,14 @@ class ApiService {
           if (errorBody is Map<String, dynamic>) {
             if (errorBody['error'] != null) {
               errorMessage = errorBody['error'] as String;
+              // Include details if available
+              if (errorBody['details'] != null) {
+                errorMessage = '${errorMessage}: ${errorBody['details']}';
+              }
             } else if (errorBody['message'] != null) {
               errorMessage = errorBody['message'] as String;
+            } else if (errorBody['details'] != null) {
+              errorMessage = errorBody['details'] as String;
             } else {
               errorMessage = '${errorMessage} - ${response.body}';
             }
