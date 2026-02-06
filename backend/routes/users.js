@@ -224,11 +224,21 @@ router.post('/', async (req, res) => {
       console.log('[USERS API] Using provided password_hash');
     }
 
+    // Check which columns exist in users table first
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name IN ('company_id', 'is_superadmin')
+    `);
+    const existingColumns = columnCheck.rows.map(row => row.column_name);
+    const hasCompanyId = existingColumns.includes('company_id');
+    const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+    
     // Determine company_id
     let finalCompanyId = company_id;
     
-    // If company_id not provided, try to get it from the creating user
-    if (!finalCompanyId && created_by_user_id) {
+    // If company_id not provided, try to get it from the creating user (only if column exists)
+    if (!finalCompanyId && hasCompanyId && created_by_user_id) {
       const creatorResult = await pool.query(
         'SELECT company_id FROM users WHERE id = $1',
         [created_by_user_id]
@@ -239,8 +249,8 @@ router.post('/', async (req, res) => {
       }
     }
     
-    // Also check req.query.userId as fallback
-    if (!finalCompanyId && req.query.userId) {
+    // Also check req.query.userId as fallback (only if column exists)
+    if (!finalCompanyId && hasCompanyId && req.query.userId) {
       const creatorResult = await pool.query(
         'SELECT company_id FROM users WHERE id = $1',
         [req.query.userId]
@@ -250,16 +260,6 @@ router.post('/', async (req, res) => {
         console.log('[USERS API] Using query userId\'s company_id:', finalCompanyId);
       }
     }
-
-    // Check which columns exist in users table
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'users' AND column_name IN ('company_id', 'is_superadmin')
-    `);
-    const existingColumns = columnCheck.rows.map(row => row.column_name);
-    const hasCompanyId = existingColumns.includes('company_id');
-    const hasIsSuperadmin = existingColumns.includes('is_superadmin');
     
     // Build INSERT statement based on available columns
     const insertColumns = ['id', 'email', 'password_hash', 'first_name', 'last_name', 'role', 'phone_number', 'photo_url', 'is_active'];
