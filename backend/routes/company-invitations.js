@@ -207,18 +207,59 @@ router.get('/token/:token', async (req, res) => {
   try {
     const { token } = req.params;
     
-    const result = await pool.query(
-      `SELECT 
-        ci.*,
-        c.name as company_name,
-        c.email as company_email,
-        c.phone_number as company_phone,
-        c.address as company_address
-       FROM company_invitations ci
-       JOIN companies c ON ci.company_id = c.id
-       WHERE ci.invitation_token = $1`,
-      [token.toUpperCase()]
-    );
+    // Check if company_invitations table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'company_invitations'
+      )
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      return res.status(404).json({ error: 'Invitation not found', details: 'company_invitations table does not exist' });
+    }
+    
+    // Check if companies table exists for JOIN
+    const companiesTableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'companies'
+      )
+    `);
+    
+    let result;
+    if (companiesTableCheck.rows[0].exists) {
+      // Try JOIN query first
+      try {
+        result = await pool.query(
+          `SELECT 
+            ci.*,
+            c.name as company_name,
+            c.email as company_email,
+            c.phone_number as company_phone,
+            c.address as company_address
+           FROM company_invitations ci
+           JOIN companies c ON ci.company_id = c.id
+           WHERE ci.invitation_token = $1`,
+          [token.toUpperCase()]
+        );
+      } catch (joinError) {
+        // If JOIN fails (e.g., foreign key issue), try without JOIN
+        console.log('JOIN query failed, trying without JOIN:', joinError.message);
+        result = await pool.query(
+          `SELECT * FROM company_invitations WHERE invitation_token = $1`,
+          [token.toUpperCase()]
+        );
+      }
+    } else {
+      // Companies table doesn't exist, query without JOIN
+      result = await pool.query(
+        `SELECT * FROM company_invitations WHERE invitation_token = $1`,
+        [token.toUpperCase()]
+      );
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Invitation not found' });
