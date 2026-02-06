@@ -6,6 +6,20 @@ const { v4: uuidv4 } = require('uuid');
 // GET all incidents
 router.get('/', async (req, res) => {
   try {
+    // Check if table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'incidents'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      console.log('⚠️  incidents table does not exist yet. Returning empty array.');
+      return res.json([]);
+    }
+    
     const result = await pool.query(
       `SELECT i.*, 
               p.name as project_name,
@@ -20,7 +34,7 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching incidents:', error);
-    res.status(500).json({ error: 'Failed to fetch incidents' });
+    res.status(500).json({ error: 'Failed to fetch incidents', message: error.message });
   }
 });
 
@@ -55,6 +69,22 @@ router.get('/:id', async (req, res) => {
 // POST create new incident
 router.post('/', async (req, res) => {
   try {
+    // Check if table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'incidents'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      return res.status(503).json({ 
+        error: 'Incidents table not available yet', 
+        message: 'The database is still being set up. Please try again in a moment.' 
+      });
+    }
+    
     const {
       reporter_id,
       reporter_name,
@@ -72,18 +102,44 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: reporter_id, description' });
     }
 
+    // Get user's company_id if available
+    let companyId = null;
+    try {
+      const userResult = await pool.query(
+        'SELECT company_id FROM users WHERE id = $1',
+        [reporter_id]
+      );
+      companyId = userResult.rows[0]?.company_id || null;
+    } catch (userError) {
+      // If company_id column doesn't exist, that's OK
+      console.log('⚠️  Could not get company_id for reporter:', userError.message);
+    }
+
     const id = uuidv4();
+    
+    // Build INSERT query dynamically based on whether company_id column exists
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'incidents' AND column_name = 'company_id'
+    `);
+    const hasCompanyId = columnCheck.rows.length > 0;
+    
+    let insertColumns = ['id', 'reporter_id', 'project_id', 'description', 'photo_path', 'severity', 'location', 'latitude', 'longitude', 'status'];
+    let insertValues = [id, reporter_id, project_id || null, description, photo_path || null, severity, location || null, latitude || null, longitude || null, status];
+    let placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ');
+    
+    if (hasCompanyId && companyId) {
+      insertColumns.push('company_id');
+      insertValues.push(companyId);
+      placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ');
+    }
+    
     const result = await pool.query(
-      `INSERT INTO incidents (
-        id, reporter_id, project_id, description, photo_path,
-        severity, location, latitude, longitude, status
-      )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO incidents (${insertColumns.join(', ')})
+       VALUES (${placeholders})
        RETURNING *`,
-      [
-        id, reporter_id, project_id || null, description, photo_path || null,
-        severity, location || null, latitude || null, longitude || null, status
-      ]
+      insertValues
     );
 
     res.status(201).json(result.rows[0]);

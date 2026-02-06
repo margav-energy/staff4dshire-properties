@@ -436,6 +436,34 @@ async function runAdditionalSchemas() {
       console.log('✅ conversations table already exists.');
     }
 
+    // Check and run incidents schema
+    const incidentsExists = await checkTableExists('incidents');
+    if (!incidentsExists) {
+      console.log('📄 Running incidents schema...');
+      const incidentsPath = path.join(__dirname, '../schema_incidents_v2.sql');
+      if (fs.existsSync(incidentsPath)) {
+        const schema = fs.readFileSync(incidentsPath, 'utf8');
+        try {
+          await pool.query(schema);
+          console.log('✅ incidents table created successfully!');
+        } catch (error) {
+          // If uuid_generate_v4() fails, try with gen_random_uuid()
+          if (error.message.includes('uuid_generate_v4') || error.message.includes('function uuid_generate_v4')) {
+            console.log('⚠️  uuid_generate_v4() not available, using gen_random_uuid() instead...');
+            const fixedSchema = schema.replace(/uuid_generate_v4\(\)/g, 'gen_random_uuid()');
+            await pool.query(fixedSchema);
+            console.log('✅ incidents table created with gen_random_uuid()!');
+          } else {
+            console.log(`⚠️  Could not create incidents table: ${error.message.substring(0, 200)}`);
+          }
+        }
+      } else {
+        console.log('⚠️  schema_incidents_v2.sql not found.');
+      }
+    } else {
+      console.log('✅ incidents table already exists.');
+    }
+
     // Check and run job_completions and invoices schema
     const jobCompletionsExists = await checkTableExists('job_completions');
     if (!jobCompletionsExists) {
