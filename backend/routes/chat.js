@@ -188,20 +188,36 @@ router.get('/conversations/:conversationId/messages', async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
+    // Check if message_reads table exists
+    const messageReadsExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'message_reads'
+      )
+    `);
+    const hasMessageReads = messageReadsExists.rows[0].exists;
+    
+    // Build query with or without read status
+    let readStatusQuery = `'sent' as read_status`;
+    if (hasMessageReads && userId) {
+      readStatusQuery = `CASE 
+        WHEN m.sender_id = $4 THEN 'sent'
+        WHEN EXISTS (
+          SELECT 1 FROM message_reads mr 
+          WHERE mr.message_id = m.id AND mr.user_id = $4
+        ) THEN 'read'
+        ELSE 'sent'
+      END as read_status`;
+    }
+    
     // Get messages with sender info and read status
     const result = await pool.query(
       `SELECT m.id, m.conversation_id, m.sender_id, m.message_text, m.message_type,
               m.file_url, m.file_name, m.file_size, m.is_edited, m.is_deleted,
               m.edited_at, m.created_at,
               u.first_name, u.last_name, u.photo_url,
-              CASE 
-                WHEN m.sender_id = $4 THEN 'sent'
-                WHEN EXISTS (
-                  SELECT 1 FROM message_reads mr 
-                  WHERE mr.message_id = m.id AND mr.user_id = $4
-                ) THEN 'read'
-                ELSE 'sent'
-              END as read_status
+              ${readStatusQuery}
        FROM messages m
        INNER JOIN users u ON m.sender_id = u.id
        WHERE m.conversation_id = $1 AND m.is_deleted = FALSE
@@ -471,21 +487,34 @@ router.put('/conversations/:conversationId/read', async (req, res) => {
       [conversationId, userId]
     );
 
-    // Mark all messages in this conversation as read by this user
-    await pool.query(
-      `INSERT INTO message_reads (message_id, user_id, read_at)
-       SELECT m.id, $2, CURRENT_TIMESTAMP
-       FROM messages m
-       WHERE m.conversation_id = $1 
-         AND m.sender_id != $2 
-         AND m.is_deleted = FALSE
-         AND NOT EXISTS (
-           SELECT 1 FROM message_reads mr 
-           WHERE mr.message_id = m.id AND mr.user_id = $2
-         )
-       ON CONFLICT (message_id, user_id) DO NOTHING`,
-      [conversationId, userId]
-    );
+    // Check if message_reads table exists before trying to mark messages as read
+    const messageReadsExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'message_reads'
+      )
+    `);
+    
+    if (messageReadsExists.rows[0].exists) {
+      // Mark all messages in this conversation as read by this user
+      await pool.query(
+        `INSERT INTO message_reads (message_id, user_id, read_at)
+         SELECT m.id, $2, CURRENT_TIMESTAMP
+         FROM messages m
+         WHERE m.conversation_id = $1 
+           AND m.sender_id != $2 
+           AND m.is_deleted = FALSE
+           AND NOT EXISTS (
+             SELECT 1 FROM message_reads mr 
+             WHERE mr.message_id = m.id AND mr.user_id = $2
+           )
+         ON CONFLICT (message_id, user_id) DO NOTHING`,
+        [conversationId, userId]
+      );
+    } else {
+      console.log('⚠️  message_reads table does not exist yet. Skipping read status update.');
+    }
 
     // Emit read receipts update
     const io = req.app.get('io');
