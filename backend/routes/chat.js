@@ -238,6 +238,27 @@ router.get('/conversations/:conversationId/messages', async (req, res) => {
 
 // POST create new conversation
 router.post('/conversations', async (req, res) => {
+  try {
+    // Check if conversations table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'conversations'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      return res.status(503).json({ 
+        error: 'Conversations table not available yet', 
+        message: 'The database is still being set up. Please try again in a moment.' 
+      });
+    }
+  } catch (checkError) {
+    console.error('Error checking table existence:', checkError);
+    return res.status(500).json({ error: 'Failed to check database status', message: checkError.message });
+  }
+  
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
