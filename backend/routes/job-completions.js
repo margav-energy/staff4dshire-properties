@@ -6,6 +6,20 @@ const { v4: uuidv4 } = require('uuid');
 // GET all job completions
 router.get('/', async (req, res) => {
   try {
+    // Check if table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'job_completions'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      console.log('⚠️  job_completions table does not exist yet. Returning empty array.');
+      return res.json([]);
+    }
+    
     const result = await pool.query(
       `SELECT jc.*, 
               p.name as project_name,
@@ -18,7 +32,7 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching job completions:', error);
-    res.status(500).json({ error: 'Failed to fetch job completions' });
+    res.status(500).json({ error: 'Failed to fetch job completions', message: error.message });
   }
 });
 
@@ -51,6 +65,22 @@ router.get('/:id', async (req, res) => {
 // POST create new job completion
 router.post('/', async (req, res) => {
   try {
+    // Check if table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'job_completions'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      return res.status(503).json({ 
+        error: 'Job completions table not available yet', 
+        message: 'The database is still being set up. Please try again in a moment.' 
+      });
+    }
+    
     const {
       time_entry_id,
       project_id,

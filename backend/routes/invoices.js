@@ -6,6 +6,20 @@ const { v4: uuidv4 } = require('uuid');
 // GET all invoices
 router.get('/', async (req, res) => {
   try {
+    // Check if table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'invoices'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      console.log('⚠️  invoices table does not exist yet. Returning empty array.');
+      return res.json([]);
+    }
+    
     const result = await pool.query(
       `SELECT i.*, 
               p.name as project_name,
@@ -19,7 +33,7 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching invoices:', error);
-    res.status(500).json({ error: 'Failed to fetch invoices' });
+    res.status(500).json({ error: 'Failed to fetch invoices', message: error.message });
   }
 });
 
