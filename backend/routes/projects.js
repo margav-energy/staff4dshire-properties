@@ -194,9 +194,18 @@ router.post('/', async (req, res) => {
     if (!companyId) {
       const userId = req.query.userId || req.body.created_by_user_id;
       if (userId) {
-        const userResult = await pool.query('SELECT company_id FROM users WHERE id = $1', [userId]);
-        if (userResult.rows.length > 0) {
-          companyId = userResult.rows[0].company_id;
+        // Check if company_id column exists in users table
+        const usersColumnCheck = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'users' AND column_name = 'company_id'
+        `);
+        
+        if (usersColumnCheck.rows.length > 0) {
+          const userResult = await pool.query('SELECT company_id FROM users WHERE id = $1', [userId]);
+          if (userResult.rows.length > 0) {
+            companyId = userResult.rows[0].company_id;
+          }
         }
       }
     }
