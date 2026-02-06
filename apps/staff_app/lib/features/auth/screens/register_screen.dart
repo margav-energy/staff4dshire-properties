@@ -37,6 +37,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _selectedCompanyId;
   bool _isLoadingCompanies = false;
   bool _isValidatingCode = false;
+  bool _invitationValidated = false; // Track if invitation code has been validated
 
   @override
   void initState() {
@@ -96,12 +97,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
       
       setState(() {
         _selectedCompanyId = invitation.companyId;
+        _invitationValidated = true; // Mark invitation as validated
       });
       
     } catch (e) {
       // Invalid code - clear company selection
       setState(() {
         _selectedCompanyId = null;
+        _invitationValidated = false; // Reset validation status
       });
       // Don't show error for every keystroke - only on submit
     } finally {
@@ -771,7 +774,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      readOnly: _isUsingInvitationCode && _invitationCodeController.text.isNotEmpty,
+                      readOnly: _invitationValidated, // Only read-only after invitation is validated
                       decoration: InputDecoration(
                         labelText: 'Email *',
                         hintText: 'Enter your email',
