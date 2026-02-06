@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:staff4dshire_shared/shared.dart';
 
@@ -70,8 +71,31 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           ),
         );
 
-        // Navigate back or to dashboard
-        Navigator.of(context).pop(true); // Return true to indicate success
+        // For mandatory password changes, navigate to login so user can log in with new password
+        // For non-mandatory changes, navigate to dashboard
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          if (widget.isMandatory) {
+            // Log out and redirect to login page
+            await authProvider.logout();
+            context.go('/login');
+          } else {
+            // Navigate to dashboard based on user role
+            final updatedUser = authProvider.currentUser;
+            if (updatedUser != null) {
+              if (updatedUser.isSuperadmin || updatedUser.role == UserRole.superadmin) {
+                context.go('/dashboard?role=superadmin');
+              } else if (updatedUser.role == UserRole.admin) {
+                context.go('/dashboard?role=admin');
+              } else {
+                context.go('/dashboard?role=admin');
+              }
+            } else {
+              // If user is null, go to login
+              context.go('/login');
+            }
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
