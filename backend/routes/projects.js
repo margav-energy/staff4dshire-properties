@@ -13,23 +13,46 @@ router.get('/', async (req, res) => {
     let params = [];
     
     if (userId) {
+      // Check which columns exist in users table
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name IN ('is_superadmin', 'company_id')
+      `);
+      const existingColumns = columnCheck.rows.map(row => row.column_name);
+      const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+      const hasCompanyId = existingColumns.includes('company_id');
+      
+      // Build select query based on available columns
+      let selectColumns = ['role'];
+      if (hasCompanyId) {
+        selectColumns.push('company_id');
+      }
+      if (hasIsSuperadmin) {
+        selectColumns.push('is_superadmin');
+      }
+      
       // Get user's company_id and superadmin status
       const userResult = await pool.query(
-        'SELECT company_id, is_superadmin, role FROM users WHERE id = $1',
+        `SELECT ${selectColumns.join(', ')} FROM users WHERE id = $1`,
         [userId]
       );
       
       if (userResult.rows.length > 0) {
         const user = userResult.rows[0];
+        const isSuperadmin = (hasIsSuperadmin && user.is_superadmin) || user.role === 'superadmin';
+        const companyId = hasCompanyId ? user.company_id : null;
+        
         console.log('[PROJECTS API] User found:', {
           userId,
-          company_id: user.company_id,
-          is_superadmin: user.is_superadmin,
-          role: user.role
+          company_id: companyId,
+          is_superadmin: hasIsSuperadmin ? user.is_superadmin : false,
+          role: user.role,
+          isSuperadmin
         });
         
         // Superadmins can see all projects
-        if (!user.is_superadmin && user.role !== 'superadmin') {
+        if (!isSuperadmin) {
           // Regular users can only see projects from their company
           // Check if company_id column exists first
           try {
@@ -40,13 +63,13 @@ router.get('/', async (req, res) => {
             `);
             const hasCompanyIdColumn = columnCheck.rows.length > 0;
             
-            if (hasCompanyIdColumn) {
+            if (hasCompanyId) {
               // Only filter if company_id exists (non-null)
-              if (user.company_id) {
+              if (companyId) {
                 // Filter by matching company_id
                 query += ' WHERE company_id IS NOT NULL AND company_id = $1';
-                params = [user.company_id];
-                console.log('[PROJECTS API] Filtering by company_id:', user.company_id);
+                params = [companyId];
+                console.log('[PROJECTS API] Filtering by company_id:', companyId);
               } else {
                 // User has no company_id - return empty list
                 query += ' WHERE 1=0'; // Always false condition
