@@ -280,7 +280,13 @@ router.get('/token/:token', async (req, res) => {
     res.json(invitation);
   } catch (error) {
     console.error('Error fetching invitation:', error);
-    res.status(500).json({ error: 'Failed to fetch invitation' });
+    console.error('Error details:', error.message);
+    console.error('Error code:', error.code);
+    res.status(500).json({ 
+      error: 'Failed to fetch invitation',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
