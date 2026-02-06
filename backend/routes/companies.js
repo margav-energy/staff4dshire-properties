@@ -371,29 +371,102 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const userId = req.query.userId;
+    const { id } = req.params;
+    
+    // Check if company exists first
+    const companyCheck = await pool.query('SELECT id, name FROM companies WHERE id = $1', [id]);
+    if (companyCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
     
     if (userId) {
-      const userResult = await pool.query(
-        'SELECT is_superadmin, role FROM users WHERE id = $1',
-        [userId]
-      );
+      // Check which columns exist
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name IN ('is_superadmin', 'role')
+      `);
+      const existingColumns = columnCheck.rows.map(row => row.column_name);
+      const hasIsSuperadmin = existingColumns.includes('is_superadmin');
       
-      if (userResult.rows.length === 0 || (!userResult.rows[0].is_superadmin && userResult.rows[0].role !== 'superadmin')) {
-        return res.status(403).json({ error: 'Only superadmins can delete companies' });
+      let selectColumns = [];
+      if (hasIsSuperadmin) {
+        selectColumns.push('is_superadmin');
+      }
+      if (existingColumns.includes('role')) {
+        selectColumns.push('role');
+      }
+      
+      if (selectColumns.length > 0) {
+        const userResult = await pool.query(
+          `SELECT ${selectColumns.join(', ')} FROM users WHERE id = $1`,
+          [userId]
+        );
+        
+        if (userResult.rows.length === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const user = userResult.rows[0];
+        const isSuperadmin = (hasIsSuperadmin && user.is_superadmin) || user.role === 'superadmin';
+        
+        if (!isSuperadmin) {
+          return res.status(403).json({ error: 'Only superadmins can delete companies' });
+        }
+      } else {
+        // No role columns exist, check by role field if it exists
+        const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+        if (userResult.rows.length === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        if (userResult.rows[0].role !== 'superadmin') {
+          return res.status(403).json({ error: 'Only superadmins can delete companies' });
+        }
       }
     }
     
-    const { id } = req.params;
+    // Check if there are users assigned to this company
+    const usersCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'company_id'
+    `);
+    
+    if (usersCheck.rows.length > 0) {
+      const usersInCompany = await pool.query(
+        'SELECT COUNT(*) as count FROM users WHERE company_id = $1',
+        [id]
+      );
+      const userCount = parseInt(usersInCompany.rows[0].count);
+      
+      if (userCount > 0) {
+        // Option 1: Delete company and set users' company_id to NULL
+        await pool.query('UPDATE users SET company_id = NULL WHERE company_id = $1', [id]);
+        console.log(`⚠️  Unassigned ${userCount} users from company before deletion`);
+      }
+    }
+    
+    // Delete the company
     const result = await pool.query('DELETE FROM companies WHERE id = $1 RETURNING *', [id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    res.json({ message: 'Company deleted successfully', company: result.rows[0] });
+    res.json({ 
+      message: 'Company deleted successfully', 
+      company: result.rows[0],
+      usersUnassigned: usersCheck.rows.length > 0 ? userCount : 0
+    });
   } catch (error) {
     console.error('Error deleting company:', error);
-    res.status(500).json({ error: 'Failed to delete company' });
+    console.error('Error details:', error.message);
+    console.error('Error code:', error.code);
+    res.status(500).json({ 
+      error: 'Failed to delete company',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
