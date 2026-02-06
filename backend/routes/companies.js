@@ -10,8 +10,27 @@ router.get('/', async (req, res) => {
     const userId = req.query.userId;
     
     if (userId) {
+      // Check which columns exist in users table
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name IN ('company_id', 'is_superadmin')
+      `);
+      const existingColumns = columnCheck.rows.map(row => row.column_name);
+      const hasCompanyId = existingColumns.includes('company_id');
+      const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+      
+      // Build select query based on available columns
+      let selectColumns = ['role'];
+      if (hasCompanyId) {
+        selectColumns.push('company_id');
+      }
+      if (hasIsSuperadmin) {
+        selectColumns.push('is_superadmin');
+      }
+      
       const userResult = await pool.query(
-        'SELECT company_id, is_superadmin, role FROM users WHERE id = $1',
+        `SELECT ${selectColumns.join(', ')} FROM users WHERE id = $1`,
         [userId]
       );
       
@@ -20,16 +39,18 @@ router.get('/', async (req, res) => {
       }
       
       const user = userResult.rows[0];
+      const isSuperadmin = (hasIsSuperadmin && user.is_superadmin) || user.role === 'superadmin';
+      const companyId = hasCompanyId ? user.company_id : null;
       
       // Superadmins get all companies
-      if (user.is_superadmin || user.role === 'superadmin') {
+      if (isSuperadmin) {
         const result = await pool.query('SELECT * FROM companies ORDER BY created_at DESC');
         return res.json(result.rows);
       }
       
       // Regular users get only their own company
-      if (user.company_id) {
-        const result = await pool.query('SELECT * FROM companies WHERE id = $1', [user.company_id]);
+      if (companyId) {
+        const result = await pool.query('SELECT * FROM companies WHERE id = $1', [companyId]);
         return res.json(result.rows); // Returns array with one company or empty array
       } else {
         // User has no company_id

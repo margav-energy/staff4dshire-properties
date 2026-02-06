@@ -64,9 +64,28 @@ router.get('/', async (req, res) => {
     let params = [];
     
     if (userId) {
+      // Check which columns exist in users table
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name IN ('company_id', 'is_superadmin')
+      `);
+      const existingColumns = columnCheck.rows.map(row => row.column_name);
+      const hasCompanyId = existingColumns.includes('company_id');
+      const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+      
+      // Build select query based on available columns
+      let selectColumns = ['role'];
+      if (hasCompanyId) {
+        selectColumns.push('company_id');
+      }
+      if (hasIsSuperadmin) {
+        selectColumns.push('is_superadmin');
+      }
+      
       // Get user's company_id and superadmin status
       const userResult = await pool.query(
-        'SELECT company_id, is_superadmin, role FROM users WHERE id = $1',
+        `SELECT ${selectColumns.join(', ')} FROM users WHERE id = $1`,
         [userId]
       );
       
@@ -74,22 +93,34 @@ router.get('/', async (req, res) => {
         const user = userResult.rows[0];
         req.user = user; // Set for middleware
         
+        const isSuperadmin = (hasIsSuperadmin && user.is_superadmin) || user.role === 'superadmin';
+        const companyId = hasCompanyId ? user.company_id : null;
+        
         console.log('[USERS API] User found:', {
           userId,
-          company_id: user.company_id,
-          is_superadmin: user.is_superadmin,
-          role: user.role
+          company_id: companyId,
+          is_superadmin: hasIsSuperadmin ? user.is_superadmin : false,
+          role: user.role,
+          isSuperadmin
         });
         
         // Superadmins can see all users
-        if (!user.is_superadmin && user.role !== 'superadmin') {
+        if (!isSuperadmin) {
           // Regular users can only see users from their company
           // Only filter if company_id exists (non-null)
-          if (user.company_id) {
-            // Explicitly exclude users with NULL company_id and filter by matching company_id
-            query += ' WHERE company_id IS NOT NULL AND company_id = $1';
-            params = [user.company_id];
-            console.log('[USERS API] Filtering by company_id:', user.company_id, '(excluding NULL company_id)');
+          if (companyId) {
+            // Check if company_id column exists in users table before filtering
+            if (hasCompanyId) {
+              // Explicitly exclude users with NULL company_id and filter by matching company_id
+              query += ' WHERE company_id IS NOT NULL AND company_id = $1';
+              params = [companyId];
+              console.log('[USERS API] Filtering by company_id:', companyId, '(excluding NULL company_id)');
+            } else {
+              // company_id column doesn't exist - return empty list
+              query += ' WHERE 1=0';
+              params = [];
+              console.log('[USERS API] company_id column does not exist - returning empty list');
+            }
           } else {
             // User has no company_id - return empty list
             query += ' WHERE 1=0'; // Always false condition
@@ -119,8 +150,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET user by email (helper endpoint)
-router.get('/by-email/:email', async (req, res) => {
+// GET user by email (helper endpoint) - supports both /by-email/:email and /email/:email
+const getUserByEmail = async (req, res) => {
   try {
     const { email } = req.params;
     const normalizedEmail = email.toLowerCase().trim();
