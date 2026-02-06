@@ -464,6 +464,62 @@ async function runAdditionalSchemas() {
       console.log('✅ incidents table already exists.');
     }
 
+    // Check and run onboarding schema
+    const onboardingProgressExists = await checkTableExists('onboarding_progress');
+    if (!onboardingProgressExists) {
+      console.log('📄 Running onboarding schema...');
+      const onboardingPath = path.join(__dirname, '../schema_onboarding.sql');
+      if (fs.existsSync(onboardingPath)) {
+        const schema = fs.readFileSync(onboardingPath, 'utf8');
+        try {
+          await pool.query(schema);
+          console.log('✅ onboarding tables created successfully!');
+        } catch (error) {
+          // If uuid_generate_v4() fails, try with gen_random_uuid()
+          if (error.message.includes('uuid_generate_v4') || error.message.includes('function uuid_generate_v4')) {
+            console.log('⚠️  uuid_generate_v4() not available, using gen_random_uuid() instead...');
+            const fixedSchema = schema.replace(/uuid_generate_v4\(\)/g, 'gen_random_uuid()');
+            await pool.query(fixedSchema);
+            console.log('✅ onboarding tables created with gen_random_uuid()!');
+          } else {
+            console.log(`⚠️  Could not create onboarding tables: ${error.message.substring(0, 200)}`);
+          }
+        }
+      } else {
+        console.log('⚠️  schema_onboarding.sql not found.');
+      }
+    } else {
+      console.log('✅ onboarding_progress table already exists.');
+    }
+
+    // Check and run CIS onboarding schema
+    const cisOnboardingExists = await checkTableExists('cis_onboarding');
+    if (!cisOnboardingExists) {
+      console.log('📄 Running CIS onboarding schema...');
+      const cisOnboardingPath = path.join(__dirname, '../schema_cis_onboarding.sql');
+      if (fs.existsSync(cisOnboardingPath)) {
+        const schema = fs.readFileSync(cisOnboardingPath, 'utf8');
+        try {
+          await pool.query(schema);
+          console.log('✅ cis_onboarding table created successfully!');
+        } catch (error) {
+          // If uuid_generate_v4() fails, try with gen_random_uuid()
+          if (error.message.includes('uuid_generate_v4') || error.message.includes('function uuid_generate_v4')) {
+            console.log('⚠️  uuid_generate_v4() not available, using gen_random_uuid() instead...');
+            const fixedSchema = schema.replace(/uuid_generate_v4\(\)/g, 'gen_random_uuid()');
+            await pool.query(fixedSchema);
+            console.log('✅ cis_onboarding table created with gen_random_uuid()!');
+          } else {
+            console.log(`⚠️  Could not create cis_onboarding table: ${error.message.substring(0, 200)}`);
+          }
+        }
+      } else {
+        console.log('⚠️  schema_cis_onboarding.sql not found.');
+      }
+    } else {
+      console.log('✅ cis_onboarding table already exists.');
+    }
+
     // Check and run job_completions and invoices schema
     const jobCompletionsExists = await checkTableExists('job_completions');
     if (!jobCompletionsExists) {

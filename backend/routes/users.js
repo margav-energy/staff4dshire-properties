@@ -469,7 +469,17 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    // Check if updated_at column exists before trying to update it
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'updated_at'
+    `);
+    
+    if (columnCheck.rows.length > 0) {
+      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    }
+    
     values.push(id);
 
     const result = await pool.query(

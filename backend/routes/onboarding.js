@@ -7,6 +7,30 @@ router.get('/progress/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
+    // Check if table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'onboarding_progress'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      console.log('⚠️  onboarding_progress table does not exist yet. Returning default progress.');
+      return res.json({
+        user_id: userId,
+        current_step: 1,
+        is_complete: false,
+        step_1_completed: false,
+        step_2_completed: false,
+        step_3_completed: false,
+        step_4_completed: false,
+        step_5_completed: false,
+        step_6_completed: false
+      });
+    }
+    
     const result = await pool.query(
       'SELECT * FROM onboarding_progress WHERE user_id = $1',
       [userId]
@@ -26,7 +50,7 @@ router.get('/progress/:userId', async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching onboarding progress:', error);
-    res.status(500).json({ error: 'Failed to fetch onboarding progress' });
+    res.status(500).json({ error: 'Failed to fetch onboarding progress', message: error.message });
   }
 });
 
@@ -353,6 +377,20 @@ router.get('/cis/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
+    // Check if table exists
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'cis_onboarding'
+      )
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      console.log('⚠️  cis_onboarding table does not exist yet. Returning null.');
+      return res.json(null);
+    }
+    
     const result = await pool.query(
       'SELECT * FROM cis_onboarding WHERE user_id = $1',
       [userId]
@@ -365,7 +403,7 @@ router.get('/cis/:userId', async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching CIS onboarding:', error);
-    res.status(500).json({ error: 'Failed to fetch CIS onboarding' });
+    res.status(500).json({ error: 'Failed to fetch CIS onboarding', message: error.message });
   }
 });
 
