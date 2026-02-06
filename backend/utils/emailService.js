@@ -337,10 +337,12 @@ Please review this request in the admin dashboard.
 async function sendCredentialsEmail(to, password, firstName, companyName, baseUrl) {
   // If baseUrl is localhost, don't include clickable link (won't work in email)
   const isLocalhost = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
-  const loginUrl = isLocalhost ? null : `${baseUrl}/login`;
+  // Use base URL or /welcome instead of /login to avoid 404 errors with Flutter web routing
+  // The app will handle routing client-side
+  const loginUrl = isLocalhost ? null : baseUrl; // Just use base URL, app will redirect to /welcome or /login
   const loginInstructions = isLocalhost 
     ? `Please open your admin app or navigate to the login page manually.`
-    : `Click the button below or visit: ${baseUrl}/login`;
+    : `Click the button below or visit: ${baseUrl}`;
 
   const mailOptions = {
     from: process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@staff4dshire.com',
