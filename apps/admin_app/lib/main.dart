@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
 // Shared package
 import 'package:staff4dshire_shared/shared.dart';
@@ -10,6 +11,9 @@ import 'core/router/admin_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Use hash-based routing for static hosting compatibility
+  usePathUrlStrategy();
   
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([
