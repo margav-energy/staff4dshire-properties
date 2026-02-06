@@ -79,9 +79,7 @@ if (process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
  * @param {string} baseUrl - Base URL for the app (e.g., https://app.staff4dshire.com or http://localhost:3000 for dev)
  */
 async function sendInvitationEmail(to, invitationToken, companyName, role, expiresAt, baseUrl) {
-  // Use hash-based routing for Flutter web apps to avoid 404 errors
-  // Flutter GoRouter supports both hash and path-based routing
-  const invitationLink = `${baseUrl}#/register?token=${invitationToken}`;
+  const invitationLink = `${baseUrl}/register?token=${invitationToken}`;
   const expiresDate = new Date(expiresAt).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'long',
