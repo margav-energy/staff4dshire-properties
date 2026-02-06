@@ -61,7 +61,6 @@ import '../../features/onboarding/screens/cis_onboarding_form_screen.dart';
 class AdminRouter {
   static GoRouter createRouter(AuthProvider? authProvider) {
     return GoRouter(
-      useHash: true, // Use hash-based routing for static hosting compatibility
       // Don't set initialLocation - let GoRouter use the browser URL
       // This allows email links to work properly
       refreshListenable: authProvider,
