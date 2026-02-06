@@ -200,6 +200,8 @@ router.get('/conversations/:conversationId/messages', async (req, res) => {
     
     // Build query with or without read status
     let readStatusQuery = `'sent' as read_status`;
+    let queryParams = [conversationId, limit, offset];
+    
     if (hasMessageReads && userId) {
       readStatusQuery = `CASE 
         WHEN m.sender_id = $4 THEN 'sent'
@@ -209,6 +211,7 @@ router.get('/conversations/:conversationId/messages', async (req, res) => {
         ) THEN 'read'
         ELSE 'sent'
       END as read_status`;
+      queryParams.push(userId);
     }
     
     // Get messages with sender info and read status
@@ -223,7 +226,7 @@ router.get('/conversations/:conversationId/messages', async (req, res) => {
        WHERE m.conversation_id = $1 AND m.is_deleted = FALSE
        ORDER BY m.created_at DESC
        LIMIT $2 OFFSET $3`,
-      [conversationId, limit, offset, userId || null]
+      queryParams
     );
 
     const messages = result.rows.map(row => ({
