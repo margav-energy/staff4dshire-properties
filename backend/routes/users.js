@@ -198,7 +198,11 @@ const getUserByEmail = async (req, res) => {
     console.error('Error fetching user by email:', error);
     res.status(500).json({ error: 'Failed to fetch user', message: error.message });
   }
-});
+};
+
+// Register both route aliases
+router.get('/by-email/:email', getUserByEmail);
+router.get('/email/:email', getUserByEmail);
 
 // GET user by ID
 router.get('/:id', async (req, res) => {
