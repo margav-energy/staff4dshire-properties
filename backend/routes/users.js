@@ -251,12 +251,39 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const id = uuidv4();
+    // Check which columns exist in users table
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name IN ('company_id', 'is_superadmin')
+    `);
+    const existingColumns = columnCheck.rows.map(row => row.column_name);
+    const hasCompanyId = existingColumns.includes('company_id');
+    const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+    
+    // Build INSERT statement based on available columns
+    const insertColumns = ['id', 'email', 'password_hash', 'first_name', 'last_name', 'role', 'phone_number', 'photo_url', 'is_active'];
+    const insertValues = [uuidv4(), email.toLowerCase().trim(), hashedPassword, first_name.trim(), last_name.trim(), role, phone_number?.trim() || null, photo_url || null, is_active];
+    let paramIndex = insertValues.length;
+    
+    if (hasCompanyId) {
+      insertColumns.push('company_id');
+      insertValues.push(finalCompanyId || null);
+      paramIndex++;
+    }
+    
+    if (hasIsSuperadmin) {
+      insertColumns.push('is_superadmin');
+      insertValues.push(req.body.is_superadmin || role === 'superadmin' || false);
+      paramIndex++;
+    }
+    
+    const placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ');
     const result = await pool.query(
-      `INSERT INTO users (id, email, password_hash, first_name, last_name, role, phone_number, photo_url, is_active, company_id, is_superadmin)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO users (${insertColumns.join(', ')})
+       VALUES (${placeholders})
        RETURNING *`,
-      [id, email, hashedPassword, first_name, last_name, role, phone_number || null, photo_url || null, is_active, finalCompanyId || null, is_superadmin || role === 'superadmin']
+      insertValues
     );
 
     res.status(201).json(result.rows[0]);
