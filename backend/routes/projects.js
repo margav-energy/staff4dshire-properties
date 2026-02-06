@@ -54,17 +54,17 @@ router.get('/', async (req, res) => {
         // Superadmins can see all projects
         if (!isSuperadmin) {
           // Regular users can only see projects from their company
-          // Check if company_id column exists first
+          // Check if company_id column exists in projects table first
           try {
-            const columnCheck = await pool.query(`
+            const projectsColumnCheck = await pool.query(`
               SELECT column_name 
               FROM information_schema.columns 
               WHERE table_name = 'projects' AND column_name = 'company_id'
             `);
-            const hasCompanyIdColumn = columnCheck.rows.length > 0;
+            const projectsHasCompanyId = projectsColumnCheck.rows.length > 0;
             
-            if (hasCompanyId) {
-              // Only filter if company_id exists (non-null)
+            if (projectsHasCompanyId && hasCompanyId) {
+              // Only filter if company_id exists in both tables and user has company_id
               if (companyId) {
                 // Filter by matching company_id
                 query += ' WHERE company_id IS NOT NULL AND company_id = $1';
@@ -77,12 +77,12 @@ router.get('/', async (req, res) => {
                 console.log('[PROJECTS API] User has no company_id, returning empty list');
               }
             } else {
-              // company_id column doesn't exist yet - return all projects for this user
-              console.log('[PROJECTS API] company_id column not found, returning all projects');
+              // company_id column doesn't exist in projects table yet - return all projects
+              console.log('[PROJECTS API] company_id column not found in projects table, returning all projects');
             }
           } catch (checkError) {
             // If check fails, just return all projects
-            console.log('[PROJECTS API] Error checking company_id column, returning all projects');
+            console.log('[PROJECTS API] Error checking company_id column in projects table, returning all projects:', checkError.message);
           }
         } else {
           console.log('[PROJECTS API] Superadmin detected, returning all projects');
