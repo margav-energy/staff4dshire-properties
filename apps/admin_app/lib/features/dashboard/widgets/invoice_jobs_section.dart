@@ -11,10 +11,17 @@ class InvoiceJobsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    return Consumer3<InvoiceProvider, ProjectProvider, UserProvider>(
-      builder: (context, invoiceProvider, projectProvider, userProvider, child) {
+    return Consumer4<InvoiceProvider, ProjectProvider, UserProvider, JobCompletionProvider>(
+      builder: (context, invoiceProvider, projectProvider, userProvider, jobCompletionProvider, child) {
         final invoices = invoiceProvider.invoices;
         final unpaidInvoices = invoiceProvider.getUnpaidInvoices();
+        
+        // Get approved completions that don't have invoices yet
+        final approvedCompletions = jobCompletionProvider.getApprovedCompletions();
+        final approvedCompletionsNeedingInvoices = approvedCompletions.where((completion) {
+          // Check if there's already an invoice for this completion
+          return !invoices.any((invoice) => invoice.jobCompletionId == completion.id);
+        }).toList();
 
         return Card(
           child: Padding(
@@ -38,7 +45,97 @@ class InvoiceJobsSection extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                if (invoices.isEmpty)
+                
+                // Show approved jobs needing invoices
+                if (approvedCompletionsNeedingInvoices.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Approved Jobs Needing Invoices (${approvedCompletionsNeedingInvoices.length})',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ...approvedCompletionsNeedingInvoices.take(3).map((completion) {
+                          final project = projectProvider.projects.firstWhere(
+                            (p) => p.id == completion.projectId,
+                            orElse: () => Project(id: completion.projectId, name: 'Unknown', isActive: true),
+                          );
+                          final staff = userProvider.getUserById(completion.userId);
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: InkWell(
+                              onTap: () {
+                                context.push('/jobs/approvals');
+                              },
+                              child: Row(
+                                children: [
+                                  Icon(Icons.work, color: Colors.blue, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          project.name,
+                                          style: theme.textTheme.bodyMedium?.copyWith(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${staff?.fullName ?? completion.userId}',
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      context.push('/jobs/approvals');
+                                    },
+                                    child: const Text('Create Invoice'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        if (approvedCompletionsNeedingInvoices.length > 3)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: TextButton(
+                              onPressed: () {
+                                context.push('/jobs/approvals');
+                              },
+                              child: Text('View All (${approvedCompletionsNeedingInvoices.length})'),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                
+                if (invoices.isEmpty && approvedCompletionsNeedingInvoices.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Center(
@@ -50,7 +147,7 @@ class InvoiceJobsSection extends StatelessWidget {
                       ),
                     ),
                   )
-                else
+                else if (invoices.isNotEmpty)
                   Column(
                     children: [
                       // Summary

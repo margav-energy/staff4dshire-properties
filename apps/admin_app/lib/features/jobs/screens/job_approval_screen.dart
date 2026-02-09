@@ -24,44 +24,140 @@ class _JobApprovalScreenState extends State<JobApprovalScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final jobCompletionProvider = Provider.of<JobCompletionProvider>(context);
+    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
     final pendingCompletions = jobCompletionProvider.getPendingCompletions();
+    
+    // Get approved completions that don't have invoices yet
+    final approvedCompletions = jobCompletionProvider.getApprovedCompletions();
+    final approvedNeedingInvoices = approvedCompletions.where((completion) {
+      return !invoiceProvider.invoices.any((invoice) => invoice.jobCompletionId == completion.id);
+    }).toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Job Approvals'),
-      ),
-      body: pendingCompletions.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.check_circle_outline,
-                    size: 64,
-                    color: theme.colorScheme.primary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No pending approvals',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  ),
-                ],
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Job Approvals'),
+          bottom: TabBar(
+            tabs: [
+              Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Pending'),
+                    if (pendingCompletions.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${pendingCompletions.length}',
+                          style: const TextStyle(fontSize: 12, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: pendingCompletions.length,
-              itemBuilder: (context, index) {
-                final completion = pendingCompletions[index];
-                return _JobApprovalCard(
-                  completion: completion,
-                  onApprove: () => _handleApprove(completion),
-                  onReject: () => _handleReject(completion),
-                );
-              },
-            ),
+              Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Approved (Need Invoice)'),
+                    if (approvedNeedingInvoices.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${approvedNeedingInvoices.length}',
+                          style: const TextStyle(fontSize: 12, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            // Pending Approvals Tab
+            pendingCompletions.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 64,
+                          color: theme.colorScheme.primary.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No pending approvals',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: pendingCompletions.length,
+                    itemBuilder: (context, index) {
+                      final completion = pendingCompletions[index];
+                      return _JobApprovalCard(
+                        completion: completion,
+                        onApprove: () => _handleApprove(completion),
+                        onReject: () => _handleReject(completion),
+                      );
+                    },
+                  ),
+            
+            // Approved Jobs Needing Invoices Tab
+            approvedNeedingInvoices.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.receipt_long,
+                          size: 64,
+                          color: theme.colorScheme.primary.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'All approved jobs have invoices',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: approvedNeedingInvoices.length,
+                    itemBuilder: (context, index) {
+                      final completion = approvedNeedingInvoices[index];
+                      return _ApprovedJobCard(
+                        completion: completion,
+                        onGenerateInvoice: () => _handleGenerateInvoice(completion),
+                      );
+                    },
+                  ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -218,6 +314,165 @@ class _JobApprovalScreenState extends State<JobApprovalScreen> {
         );
       }
     }
+  }
+
+  Future<void> _handleGenerateInvoice(JobCompletion completion) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
+    final timesheetProvider = Provider.of<TimesheetProvider>(context, listen: false);
+    final projectProvider = Provider.of<ProjectProvider>(context, listen: false);
+    final supervisor = authProvider.currentUser;
+
+    if (supervisor == null) return;
+
+    try {
+      // Get time entry to calculate hours
+      final timeEntry = timesheetProvider.entries.firstWhere(
+        (e) => e.id == completion.timeEntryId,
+        orElse: () => timesheetProvider.entries.first,
+      );
+
+      // Calculate hours worked
+      final hoursWorked = timeEntry.duration.inMinutes / 60.0;
+      const defaultHourlyRate = 25.0; // Can be configured per project/user
+      final amount = hoursWorked * defaultHourlyRate;
+
+      // Get project for description
+      final project = projectProvider.projects.firstWhere(
+        (p) => p.id == completion.projectId,
+        orElse: () => Project(
+          id: completion.projectId,
+          name: 'Unknown Project',
+          isActive: true,
+        ),
+      );
+
+      // Generate invoice
+      await invoiceProvider.generateInvoice(
+        projectId: completion.projectId,
+        staffId: completion.userId,
+        timeEntryId: completion.timeEntryId,
+        jobCompletionId: completion.id,
+        supervisorId: supervisor.id,
+        amount: amount,
+        hoursWorked: hoursWorked,
+        hourlyRate: defaultHourlyRate,
+        description: 'Job completion - ${project.name}',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invoice generated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Refresh the screen
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating invoice: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _ApprovedJobCard extends StatelessWidget {
+  final JobCompletion completion;
+  final VoidCallback onGenerateInvoice;
+
+  const _ApprovedJobCard({
+    required this.completion,
+    required this.onGenerateInvoice,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final projectProvider = Provider.of<ProjectProvider>(context, listen: false);
+    final timesheetProvider = Provider.of<TimesheetProvider>(context, listen: false);
+
+    final staff = userProvider.getUserById(completion.userId);
+    final project = projectProvider.projects.firstWhere(
+      (p) => p.id == completion.projectId,
+      orElse: () => Project(
+        id: completion.projectId,
+        name: 'Unknown Project',
+        isActive: true,
+      ),
+    );
+    final timeEntry = timesheetProvider.entries.firstWhere(
+      (e) => e.id == completion.timeEntryId,
+      orElse: () => timesheetProvider.entries.first,
+    );
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        project.name,
+                        style: theme.textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Staff: ${staff?.fullName ?? completion.userId}',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      if (completion.approvedBy != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Approved by: ${completion.approvedBy}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Chip(
+                  label: const Text('Approved'),
+                  backgroundColor: Colors.green.withOpacity(0.2),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Date: ${DateFormat('MMM dd, yyyy').format(timeEntry.signInTime)}',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onGenerateInvoice,
+              icon: const Icon(Icons.receipt),
+              label: const Text('Generate Invoice'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

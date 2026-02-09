@@ -18,6 +18,11 @@ class JobCompletionProvider extends ChangeNotifier {
     return _completions.where((c) => c.status == JobCompletionStatus.pending).toList();
   }
 
+  // Get approved completions
+  List<JobCompletion> getApprovedCompletions() {
+    return _completions.where((c) => c.status == JobCompletionStatus.approved).toList();
+  }
+
   // Get completions by project
   List<JobCompletion> getCompletionsByProject(String projectId) {
     return _completions.where((c) => c.projectId == projectId).toList();
