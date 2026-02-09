@@ -10,6 +10,7 @@ import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 
 import '../providers/timesheet_provider.dart';
+import '../providers/timesheet_provider.dart' show ApprovalStatus;
 
 class TimesheetExportService {
   static Future<void> exportTimesheet(
@@ -124,9 +125,11 @@ class TimesheetExportService {
               columnWidths: {
                 0: const pw.FlexColumnWidth(2),
                 1: const pw.FlexColumnWidth(2),
-                2: const pw.FlexColumnWidth(1.5),
+                2: const pw.FlexColumnWidth(2),
                 3: const pw.FlexColumnWidth(1.5),
-                4: const pw.FlexColumnWidth(1),
+                4: const pw.FlexColumnWidth(1.5),
+                5: const pw.FlexColumnWidth(1),
+                6: const pw.FlexColumnWidth(2),
               },
               children: [
                 // Header Row
@@ -134,10 +137,12 @@ class TimesheetExportService {
                   decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                   children: [
                     _buildTableCell('Date', isHeader: true),
+                    _buildTableCell('Staff Name', isHeader: true),
                     _buildTableCell('Project', isHeader: true),
                     _buildTableCell('Sign In', isHeader: true),
                     _buildTableCell('Sign Out', isHeader: true),
                     _buildTableCell('Hours', isHeader: true),
+                    _buildTableCell('Approval', isHeader: true),
                   ],
                 ),
                 // Data Rows
@@ -148,9 +153,28 @@ class TimesheetExportService {
                   final hours = duration.inHours;
                   final minutes = duration.inMinutes.remainder(60);
                   
+                  // Build approval status text
+                  String approvalText = 'Pending';
+                  if (entry.approvalStatus == ApprovalStatus.approved) {
+                    approvalText = entry.approvedBy != null 
+                        ? 'Approved by ${entry.approvedBy}'
+                        : 'Approved';
+                    if (entry.approvedAt != null) {
+                      approvalText += '\n${dateOnlyFormat.format(entry.approvedAt!)}';
+                    }
+                  } else if (entry.approvalStatus == ApprovalStatus.rejected) {
+                    approvalText = entry.approvedBy != null 
+                        ? 'Rejected by ${entry.approvedBy}'
+                        : 'Rejected';
+                    if (entry.approvedAt != null) {
+                      approvalText += '\n${dateOnlyFormat.format(entry.approvedAt!)}';
+                    }
+                  }
+                  
                   return pw.TableRow(
                     children: [
                       _buildTableCell(dateOnlyFormat.format(entry.signInTime)),
+                      _buildTableCell(entry.staffName),
                       _buildTableCell(entry.projectName),
                       _buildTableCell(dateFormat.format(entry.signInTime)),
                       _buildTableCell(
@@ -159,6 +183,7 @@ class TimesheetExportService {
                             : 'In Progress',
                       ),
                       _buildTableCell('${hours}h ${minutes}m'),
+                      _buildTableCell(approvalText),
                     ],
                   );
                 }).toList(),
@@ -226,12 +251,16 @@ class TimesheetExportService {
     // Headers
     sheet.appendRow([
       'Date',
+      'Staff Name',
       'Project',
       'Location',
       'Sign In',
       'Sign Out',
       'Hours',
       'Minutes',
+      'Approval Status',
+      'Approved By',
+      'Approved At',
     ]);
     
     // Style header row
@@ -239,7 +268,7 @@ class TimesheetExportService {
       bold: true,
       backgroundColorHex: '#E0E0E0',
     );
-    for (var i = 0; i < 7; i++) {
+    for (var i = 0; i < 11; i++) {
       sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0)).cellStyle = headerStyle;
     }
     
@@ -249,8 +278,17 @@ class TimesheetExportService {
       final hours = duration.inHours;
       final minutes = duration.inMinutes.remainder(60);
       
+      // Build approval status
+      String approvalStatus = 'Pending';
+      if (entry.approvalStatus == ApprovalStatus.approved) {
+        approvalStatus = 'Approved';
+      } else if (entry.approvalStatus == ApprovalStatus.rejected) {
+        approvalStatus = 'Rejected';
+      }
+      
       sheet.appendRow([
         dateOnlyFormat.format(entry.signInTime),
+        entry.staffName,
         entry.projectName,
         entry.location,
         dateFormat.format(entry.signInTime),
@@ -259,11 +297,14 @@ class TimesheetExportService {
             : 'In Progress',
         hours,
         minutes,
+        approvalStatus,
+        entry.approvedBy ?? '',
+        entry.approvedAt != null ? dateFormat.format(entry.approvedAt!) : '',
       ]);
     }
     
     // Auto-size columns
-    for (var i = 0; i < 7; i++) {
+    for (var i = 0; i < 11; i++) {
       sheet.setColumnWidth(i, 15);
     }
     
@@ -290,7 +331,7 @@ class TimesheetExportService {
     
     final csv = StringBuffer();
     // Headers
-    csv.writeln('Date,Project,Location,Sign In,Sign Out,Hours,Minutes');
+    csv.writeln('Date,Staff Name,Project,Location,Sign In,Sign Out,Hours,Minutes,Approval Status,Approved By,Approved At');
     
     // Data rows
     for (var entry in entries) {
@@ -298,8 +339,17 @@ class TimesheetExportService {
       final hours = duration.inHours;
       final minutes = duration.inMinutes.remainder(60);
       
+      // Build approval status
+      String approvalStatus = 'Pending';
+      if (entry.approvalStatus == ApprovalStatus.approved) {
+        approvalStatus = 'Approved';
+      } else if (entry.approvalStatus == ApprovalStatus.rejected) {
+        approvalStatus = 'Rejected';
+      }
+      
       csv.writeln([
         dateOnlyFormat.format(entry.signInTime),
+        '"${entry.staffName.replaceAll('"', '""')}"',
         '"${entry.projectName.replaceAll('"', '""')}"',
         '"${entry.location.replaceAll('"', '""')}"',
         dateFormat.format(entry.signInTime),
@@ -308,6 +358,9 @@ class TimesheetExportService {
             : 'In Progress',
         hours,
         minutes,
+        approvalStatus,
+        entry.approvedBy != null ? '"${entry.approvedBy!.replaceAll('"', '""')}"' : '',
+        entry.approvedAt != null ? dateFormat.format(entry.approvedAt!) : '',
       ].join(','));
     }
     
