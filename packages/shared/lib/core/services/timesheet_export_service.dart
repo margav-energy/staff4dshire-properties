@@ -10,7 +10,6 @@ import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 
 import '../providers/timesheet_provider.dart';
-import '../providers/timesheet_provider.dart' show ApprovalStatus;
 
 class TimesheetExportService {
   static Future<void> exportTimesheet(
