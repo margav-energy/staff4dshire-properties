@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:staff4dshire_shared/shared.dart';
 import 'package:flutter/foundation.dart';
 import 'package:staff4dshire_shared/shared.dart';
@@ -54,6 +54,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         // Load invoices
         final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
         invoiceProvider.loadInvoices();
+        
+        // Load incidents
+        final incidentProvider = Provider.of<IncidentProvider>(context, listen: false);
+        incidentProvider.initialize();
       }
       documentProvider.loadDocuments();
       // Timesheet data is already loaded

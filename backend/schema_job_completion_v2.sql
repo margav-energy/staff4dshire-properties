@@ -96,15 +96,25 @@ CREATE TRIGGER generate_invoice_number_trigger
     WHEN (NEW.invoice_number IS NULL OR NEW.invoice_number = '')
     EXECUTE FUNCTION generate_invoice_number();
 
--- Trigger for updated_at on job_completions
-DROP TRIGGER IF EXISTS update_job_completions_updated_at ON job_completions;
-CREATE TRIGGER update_job_completions_updated_at BEFORE UPDATE ON job_completions
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Trigger for updated_at on job_completions (only if function exists)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'update_updated_at_column') THEN
+        DROP TRIGGER IF EXISTS update_job_completions_updated_at ON job_completions;
+        CREATE TRIGGER update_job_completions_updated_at BEFORE UPDATE ON job_completions
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$;
 
--- Trigger for updated_at on invoices
-DROP TRIGGER IF EXISTS update_invoices_updated_at ON invoices;
-CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON invoices
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Trigger for updated_at on invoices (only if function exists)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'update_updated_at_column') THEN
+        DROP TRIGGER IF EXISTS update_invoices_updated_at ON invoices;
+        CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON invoices
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$;
 
 -- View for Live Jobs (jobs in progress)
 DROP VIEW IF EXISTS live_jobs;
