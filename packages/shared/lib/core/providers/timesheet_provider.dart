@@ -193,17 +193,41 @@ class TimesheetProvider extends ChangeNotifier {
   }
 
   // Approve a timesheet entry
-  Future<void> approveEntry(String entryId, String approvedBy) async {
+  // Only admin and supervisor roles can approve timesheets
+  // Staff cannot approve their own timesheets
+  Future<void> approveEntry(
+    String entryId, 
+    String approvedBy, {
+    String? approverId,
+    String? approverRole,
+  }) async {
     final index = _entries.indexWhere((e) => e.id == entryId);
-    if (index != -1) {
-      _entries[index] = _entries[index].copyWith(
-        approvalStatus: ApprovalStatus.approved,
-        approvedBy: approvedBy,
-        approvedAt: DateTime.now(),
-      );
-      notifyListeners();
-      await saveToStorage();
+    if (index == -1) {
+      throw Exception('Timesheet entry not found');
     }
+    
+    final entry = _entries[index];
+    
+    // Check if approver is trying to approve their own timesheet
+    if (approverId != null && entry.staffId == approverId) {
+      throw Exception('You cannot approve your own timesheet entry');
+    }
+    
+    // Check if approver has permission (admin or supervisor only)
+    if (approverRole != null) {
+      final role = approverRole.toLowerCase();
+      if (role != 'admin' && role != 'supervisor' && role != 'superadmin') {
+        throw Exception('Only administrators and supervisors can approve timesheet entries');
+      }
+    }
+    
+    _entries[index] = _entries[index].copyWith(
+      approvalStatus: ApprovalStatus.approved,
+      approvedBy: approvedBy,
+      approvedAt: DateTime.now(),
+    );
+    notifyListeners();
+    await saveToStorage();
   }
 
   // Reject a timesheet entry

@@ -99,7 +99,39 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
     TimesheetProvider timesheetProvider,
   ) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final approverName = authProvider.currentUser?.name ?? 'Supervisor';
+    final currentUser = authProvider.currentUser;
+    final approverName = currentUser?.name ?? 'Supervisor';
+    final approverId = currentUser?.id;
+    final approverRole = currentUser?.role.toString().split('.').last;
+
+    // Check if user is trying to approve their own timesheet
+    if (approverId != null && entry.staffId == approverId) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You cannot approve your own timesheet entry'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Check if user has permission (admin or supervisor only)
+    if (approverRole != null) {
+      final role = approverRole.toLowerCase();
+      if (role != 'admin' && role != 'supervisor' && role != 'superadmin') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Only administrators and supervisors can approve timesheet entries'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -128,7 +160,12 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
 
     if (confirmed == true && mounted) {
       try {
-        await timesheetProvider.approveEntry(entry.id, approverName);
+        await timesheetProvider.approveEntry(
+          entry.id, 
+          approverName,
+          approverId: approverId,
+          approverRole: approverRole,
+        );
 
         // Create notification for the staff member
         final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
@@ -168,14 +205,58 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
     TimesheetProvider timesheetProvider,
   ) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final approverName = authProvider.currentUser?.name ?? 'Supervisor';
+    final currentUser = authProvider.currentUser;
+    final approverName = currentUser?.name ?? 'Supervisor';
+    final approverId = currentUser?.id;
+    final approverRole = currentUser?.role.toString().split('.').last;
+
+    // Check if user has permission (admin or supervisor only)
+    if (approverRole != null) {
+      final role = approverRole.toLowerCase();
+      if (role != 'admin' && role != 'supervisor' && role != 'superadmin') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Only administrators and supervisors can approve timesheet entries'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    // Filter out entries that belong to the approver
+    final entriesToApprove = entries.where((entry) => entry.staffId != approverId).toList();
+    final ownEntries = entries.where((entry) => entry.staffId == approverId).toList();
+
+    if (entriesToApprove.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You cannot approve your own timesheet entries'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (ownEntries.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Skipping ${ownEntries.length} of your own entries'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Approve Timesheets'),
         content: Text(
-          'Approve ${entries.length} timesheet entries for ${entries.first.staffName}?',
+          'Approve ${entriesToApprove.length} timesheet entries for ${entriesToApprove.first.staffName}?',
         ),
         actions: [
           TextButton(
@@ -195,14 +276,19 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
 
     if (confirmed == true && mounted) {
       try {
-        for (var entry in entries) {
-          await timesheetProvider.approveEntry(entry.id, approverName);
+        for (var entry in entriesToApprove) {
+          await timesheetProvider.approveEntry(
+            entry.id, 
+            approverName,
+            approverId: approverId,
+            approverRole: approverRole,
+          );
         }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Approved ${entries.length} timesheet entries'),
+              content: Text('Approved ${entriesToApprove.length} timesheet entries'),
               backgroundColor: Colors.green,
             ),
           );

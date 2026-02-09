@@ -38,14 +38,18 @@ class InvoiceProvider extends ChangeNotifier {
   }
 
   // Load invoices from API or storage
-  Future<void> loadInvoices() async {
+  Future<void> loadInvoices({String? userId}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
       if (ApiConfig.isApiEnabled) {
         try {
-          final response = await ApiService.get('/invoices');
+          // Include userId in query params for company filtering
+          final endpoint = userId != null 
+              ? '/invoices?userId=${Uri.encodeComponent(userId)}'
+              : '/invoices';
+          final response = await ApiService.get(endpoint);
           if (response is List) {
             _invoices = response
                 .map((json) => Invoice.fromJson(json as Map<String, dynamic>))

@@ -51,9 +51,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         final jobCompletionProvider = Provider.of<JobCompletionProvider>(context, listen: false);
         jobCompletionProvider.loadCompletions(userId: userId);
         
-        // Load invoices
+        // Load invoices (with userId for company filtering)
         final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
-        invoiceProvider.loadInvoices();
+        invoiceProvider.loadInvoices(userId: userId);
         
         // Load incidents - ensure they're loaded from API
         final incidentProvider = Provider.of<IncidentProvider>(context, listen: false);
