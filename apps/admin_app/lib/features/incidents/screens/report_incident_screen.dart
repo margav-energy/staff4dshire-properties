@@ -422,12 +422,14 @@ class _ReportIncidentScreenState extends State<ReportIncidentScreen> {
                   onTap: () async {
                     try {
                       // Use full-screen route instead of dialog (ProjectLocationPicker has its own Scaffold)
+                      // ProjectLocationPicker handles the pop internally, so we don't need to pop in the callback
                       final selectedLocation = await Navigator.push<LocationData>(
                         context,
                         MaterialPageRoute(
                           builder: (context) => ProjectLocationPicker(
                             onLocationSelected: (locationData) {
-                              Navigator.of(context).pop(locationData);
+                              // Don't pop here - ProjectLocationPicker will handle it
+                              // This prevents double-pop which causes navigation issues
                             },
                             initialLocation: locationProvider.currentLocation,
                           ),
@@ -488,7 +490,8 @@ class _ReportIncidentScreenState extends State<ReportIncidentScreen> {
                                     height: MediaQuery.of(context).size.height * 0.8,
                                     child: ProjectLocationPicker(
                                       onLocationSelected: (locationData) {
-                                        Navigator.pop(context, locationData);
+                                        // ProjectLocationPicker will handle the pop
+                                        // Don't pop here to avoid double-pop
                                       },
                                       initialLocation: locationProvider.currentLocation,
                                     ),
