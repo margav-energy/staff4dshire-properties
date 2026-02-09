@@ -47,9 +47,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         final chatProvider = Provider.of<ChatProvider>(context, listen: false);
         chatProvider.initialize(userId);
         
-        // Load job completions for pending approvals
+        // Load job completions for pending approvals (with userId for company filtering)
         final jobCompletionProvider = Provider.of<JobCompletionProvider>(context, listen: false);
-        jobCompletionProvider.loadCompletions();
+        jobCompletionProvider.loadCompletions(userId: userId);
         
         // Load invoices
         final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);

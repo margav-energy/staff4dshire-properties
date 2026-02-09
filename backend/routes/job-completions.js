@@ -20,15 +20,72 @@ router.get('/', async (req, res) => {
       return res.json([]);
     }
     
-    const result = await pool.query(
-      `SELECT jc.*, 
-              p.name as project_name,
-              u.first_name || ' ' || u.last_name as staff_name
-       FROM job_completions jc
-       JOIN projects p ON jc.project_id = p.id
-       JOIN users u ON jc.user_id = u.id
-       ORDER BY jc.created_at DESC`
-    );
+    // Get userId from query param for company filtering
+    const userId = req.query.userId;
+    
+    let query = `
+      SELECT jc.*, 
+             p.name as project_name,
+             u.first_name || ' ' || u.last_name as staff_name
+      FROM job_completions jc
+      JOIN projects p ON jc.project_id = p.id
+      JOIN users u ON jc.user_id = u.id
+    `;
+    let params = [];
+    let paramIndex = 1;
+    
+    // Add company filtering if userId is provided
+    if (userId) {
+      // Check which columns exist in users table
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name IN ('is_superadmin', 'company_id')
+      `);
+      const existingColumns = columnCheck.rows.map(row => row.column_name);
+      const hasIsSuperadmin = existingColumns.includes('is_superadmin');
+      const hasCompanyId = existingColumns.includes('company_id');
+      
+      // Build select query based on available columns
+      let selectColumns = ['role'];
+      if (hasCompanyId) {
+        selectColumns.push('company_id');
+      }
+      if (hasIsSuperadmin) {
+        selectColumns.push('is_superadmin');
+      }
+      
+      // Get user's company_id and superadmin status
+      const userResult = await pool.query(
+        `SELECT ${selectColumns.join(', ')} FROM users WHERE id = $1`,
+        [userId]
+      );
+      
+      if (userResult.rows.length > 0) {
+        const user = userResult.rows[0];
+        const isSuperadmin = (hasIsSuperadmin && user.is_superadmin) || user.role === 'superadmin';
+        const companyId = hasCompanyId ? user.company_id : null;
+        
+        // Check if projects table has company_id column
+        const projectColumnCheck = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'projects' AND column_name = 'company_id'
+        `);
+        const projectsHasCompanyId = projectColumnCheck.rows.length > 0;
+        
+        // Filter by company_id if not superadmin and company_id exists
+        if (!isSuperadmin && companyId && projectsHasCompanyId) {
+          query += ` WHERE p.company_id = $${paramIndex}`;
+          params.push(companyId);
+          paramIndex++;
+        }
+      }
+    }
+    
+    query += ` ORDER BY jc.created_at DESC`;
+    
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching job completions:', error);

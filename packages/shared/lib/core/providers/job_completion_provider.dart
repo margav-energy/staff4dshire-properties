@@ -33,14 +33,18 @@ class JobCompletionProvider extends ChangeNotifier {
   }
 
   // Load completions from API or storage
-  Future<void> loadCompletions() async {
+  Future<void> loadCompletions({String? userId}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
       if (ApiConfig.isApiEnabled) {
         try {
-          final response = await ApiService.get('/job-completions');
+          // Include userId in query params for company filtering
+          final endpoint = userId != null 
+              ? '/job-completions?userId=${Uri.encodeComponent(userId)}'
+              : '/job-completions';
+          final response = await ApiService.get(endpoint);
           if (response is List) {
             _completions = response
                 .map((json) => JobCompletion.fromJson(json as Map<String, dynamic>))
