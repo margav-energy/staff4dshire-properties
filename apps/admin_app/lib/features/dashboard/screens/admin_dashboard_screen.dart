@@ -55,9 +55,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         final invoiceProvider = Provider.of<InvoiceProvider>(context, listen: false);
         invoiceProvider.loadInvoices();
         
-        // Load incidents
+        // Load incidents - ensure they're loaded from API
         final incidentProvider = Provider.of<IncidentProvider>(context, listen: false);
-        incidentProvider.initialize();
+        await incidentProvider.initialize();
       }
       documentProvider.loadDocuments();
       // Timesheet data is already loaded
